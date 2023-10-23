@@ -36,10 +36,10 @@
 -- Date: 2021-2023
 -- ver: 0.5
 
--- Voice alerts added, kill the blink
+-- Voice alerts added, kill the blink, brighter battery colors + line
 -- Author: Robert Gayle (bob00@rogers.com)
 -- Date: 2023
--- ver: 0.5.2
+-- ver: 0.5.3
 
 local app_name = "BattAlert"
 
@@ -391,11 +391,19 @@ end
 -- This function returns green at 100%, red bellow 30% and graduate in between
 local function getPercentColor(percent)
     if percent < 30 then
+        -- red
         return lcd.RGB(0xff, 0, 0)
+    elseif percent < 70 then
+        -- yellow
+        return lcd.RGB(0xff, 0xff, 0)
     else
-        g = math.floor(0xdf * percent / 100)
-        r = 0xdf - g
-        return lcd.RGB(r, g, 0)
+        -- green
+        return lcd.RGB(0, 0xff, 0)
+
+    -- else
+    --    g = math.floor(0xdf * percent / 100)
+    --    r = 0xdf - g
+    --    return lcd.RGB(r, g, 0)
     end
 end
 
@@ -436,7 +444,10 @@ end
 local function drawBattery(wgt, myBatt)
     -- fill batt
     local fill_color = getPercentColor(wgt.vPercent)
-    lcd.drawFilledRectangle(wgt.zone.x + myBatt.x, wgt.zone.y + myBatt.y + myBatt.h - math.floor(wgt.vPercent / 100 * (myBatt.h - myBatt.cath_h)), myBatt.w, math.floor(wgt.vPercent / 100 * (myBatt.h - myBatt.cath_h)), fill_color)
+    local pcntY = math.floor(wgt.vPercent / 100 * (myBatt.h - myBatt.cath_h))
+    local rectY = wgt.zone.y + myBatt.y + myBatt.h - pcntY
+    lcd.drawFilledRectangle(wgt.zone.x + myBatt.x, rectY, myBatt.w, pcntY, fill_color)
+    lcd.drawLine(wgt.zone.x + myBatt.x, rectY, wgt.zone.x + myBatt.x + myBatt.w - 1, rectY, SOLID, wgt.cell_color)
 
     -- draw battery segments
     lcd.drawRectangle(wgt.zone.x + myBatt.x, wgt.zone.y + myBatt.y + myBatt.cath_h, myBatt.w, myBatt.h - myBatt.cath_h, wgt.cell_color, 2)
