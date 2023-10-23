@@ -36,13 +36,24 @@
 -- Date: 2021-2023
 -- ver: 0.5
 
-local app_name = "BattAnalog"
+-- Voice alerts added, kill the blink
+-- Author: Robert Gayle (bob00@rogers.com)
+-- Date: 2023
+-- ver: 0.5.2
+
+local app_name = "BattAlert"
+
+local AUDIO_PATH = "/SOUNDS/en/"
+
+local battLow = 30
+local battCritical = 20
 
 local CELL_DETECTION_TIME = 8
 
 local _options = {
     { "Sensor"            , SOURCE, 0      }, -- default to 'A1'
     { "Color"             , COLOR , YELLOW },
+    { "Cell_Color"        , COLOR , WHITE  },
     { "Show_Total_Voltage", BOOL  , 0      }, -- 0=Show as average Lipo cell level, 1=show the total voltage (voltage as is)
     { "Lithium_Ion"       , BOOL  , 0      }, -- 0=LIPO battery, 1=LI-ION (18650/21500)
 }
@@ -133,7 +144,13 @@ local function create(zone, options)
         zone = zone,
         options = options,
         counter = 0,
+
         text_color = 0,
+        cell_color = 0,
+        border_l = 5,
+        border_r = 10,
+        border_t = 0,
+        border_b = 10,
 
         telemResetCount = 0,
         telemResetLowestMinRSSI = 101,
@@ -147,7 +164,14 @@ local function create(zone, options)
         cell_detected = false,
         vCellLive = 0,
         mainValue = 0,
-        secondaryValue = 0
+        secondaryValue = 0,
+
+        battNextPlay = 0,
+        battPercentPlayed = 100,
+
+        vflt = {},
+        vflti = 0,
+        vfltNextUpdate = 0
     }
 
     -- imports
@@ -158,10 +182,45 @@ local function create(zone, options)
     return wgt
 end
 
+-- audio support
+local function playAudio(f)
+    playFile(AUDIO_PATH .. f .. ".wav")
+end
+
+-- smoothen vPercent, sample every 1/10s, collect last 10s
+local function updateFilteredvPercent(wgt)
+    if wgt.isDataAvailable and getTime() > wgt.vfltNextUpdate then
+        wgt.vflt[wgt.vflti + 1] = wgt.vPercent
+        wgt.vflti = (wgt.vflti + 1) % 100
+
+        wgt.vfltNextUpdate = getTime() + 10
+    end
+end
+
+local function getFilteredvPercent(wgt)
+    local count = #wgt.vflt
+    if count == 0 then
+        return 0
+    end
+
+    local sum = 0
+    for i=1, count do
+        sum = sum + wgt.vflt[i]
+    end
+    return math.ceil(sum / count)
+end
+
 -- clear old telemetry data upon reset event
 local function onTelemetryResetEvent(wgt)
     log("telemetry reset event detected.")
     wgt.telemResetCount = wgt.telemResetCount + 1
+
+    wgt.battPercentPlayed = 100
+    wgt.battNextPlay = 0
+
+    wgt.vflt = {}
+    wgt.vflti = 0
+    wgt.vfltNextUpdate = 0
 
     wgt.vTotalLive = 0
     wgt.vCellLive = 0
@@ -380,16 +439,16 @@ local function drawBattery(wgt, myBatt)
     lcd.drawFilledRectangle(wgt.zone.x + myBatt.x, wgt.zone.y + myBatt.y + myBatt.h - math.floor(wgt.vPercent / 100 * (myBatt.h - myBatt.cath_h)), myBatt.w, math.floor(wgt.vPercent / 100 * (myBatt.h - myBatt.cath_h)), fill_color)
 
     -- draw battery segments
-    lcd.drawRectangle(wgt.zone.x + myBatt.x, wgt.zone.y + myBatt.y + myBatt.cath_h, myBatt.w, myBatt.h - myBatt.cath_h, WHITE, 2)
-    for i = 1, myBatt.h - myBatt.cath_h - myBatt.segments_h, myBatt.segments_h do
-        lcd.drawRectangle(wgt.zone.x + myBatt.x, wgt.zone.y + myBatt.y + myBatt.cath_h + i, myBatt.w, myBatt.segments_h, WHITE, 1)
-    end
+    lcd.drawRectangle(wgt.zone.x + myBatt.x, wgt.zone.y + myBatt.y + myBatt.cath_h, myBatt.w, myBatt.h - myBatt.cath_h, wgt.cell_color, 2)
+    -- for i = 1, myBatt.h - myBatt.cath_h - myBatt.segments_h, myBatt.segments_h do
+    --    lcd.drawRectangle(wgt.zone.x + myBatt.x, wgt.zone.y + myBatt.y + myBatt.cath_h + i, myBatt.w, myBatt.segments_h, wgt.cell_color, 1)
+    -- end
 
     -- draw plus terminal
-    local tw = 4
-    local th = 4
-    lcd.drawFilledRectangle(wgt.zone.x + myBatt.x + myBatt.w / 2 - myBatt.cath_w / 2 + tw / 2, wgt.zone.y + myBatt.y, myBatt.cath_w - tw, myBatt.cath_h, WHITE)
-    lcd.drawFilledRectangle(wgt.zone.x + myBatt.x + myBatt.w / 2 - myBatt.cath_w / 2, wgt.zone.y + myBatt.y + th, myBatt.cath_w, myBatt.cath_h - th, WHITE)
+    --local tw = 4
+    --local th = 4
+    --lcd.drawFilledRectangle(wgt.zone.x + myBatt.x + myBatt.w / 2 - myBatt.cath_w / 2 + tw / 2, wgt.zone.y + myBatt.y, myBatt.cath_w - tw, myBatt.cath_h, WHITE)
+    --lcd.drawFilledRectangle(wgt.zone.x + myBatt.x + myBatt.w / 2 - myBatt.cath_w / 2, wgt.zone.y + myBatt.y + th, myBatt.cath_w, myBatt.cath_h - th, WHITE)
     --lcd.drawText(wgt.zone.x + myBatt.x + 20, wgt.zone.y + myBatt.y + 5, string.format("%2.0f%%", wgt.vPercent), LEFT + MIDSIZE + wgt.text_color)
     --lcd.drawText(wgt.zone.x + myBatt.x + 20, wgt.zone.y + myBatt.y + 5, string.format("%2.1fV", wgt.mainValue), LEFT + MIDSIZE + wgt.text_color)
 end
@@ -429,18 +488,18 @@ end
 --- Zone size: 180x70 1/4th  (with sliders/trim)
 --- Zone size: 225x98 1/4th  (no sliders/trim)
 local function refreshZoneMedium(wgt)
-    local myBatt = { ["x"] = 0, ["y"] = 0, ["w"] = 50, ["h"] = wgt.zone.h, ["segments_w"] = 15, ["color"] = WHITE, ["cath_w"] = 26, ["cath_h"] = 10, ["segments_h"] = 16 }
+    local myBatt = { ["x"] = 0 +  wgt.border_l, ["y"] = 0, ["w"] = 50, ["h"] = wgt.zone.h - wgt.border_b, ["segments_w"] = 15, ["color"] = WHITE, ["cath_w"] = 26, ["cath_h"] = 10, ["segments_h"] = 16 }
 
     -- draw values
-    lcd.drawText(wgt.zone.x + myBatt.w + 10, wgt.zone.y, string.format("%2.2f V", wgt.mainValue), DBLSIZE + wgt.text_color + wgt.no_telem_blink)
-    lcd.drawText(wgt.zone.x + myBatt.w + 12, wgt.zone.y + 30, string.format("%2.0f %%", wgt.vPercent), MIDSIZE + wgt.text_color + wgt.no_telem_blink)
-    lcd.drawText(wgt.zone.x + wgt.zone.w - 5, wgt.zone.y + wgt.zone.h - 55, wgt.options.source_name, RIGHT + SMLSIZE + wgt.text_color + wgt.no_telem_blink)
+    lcd.drawText(wgt.zone.x + myBatt.w + 10 +  wgt.border_l, wgt.zone.y, string.format("%2.2f V", wgt.mainValue), DBLSIZE + wgt.text_color + wgt.no_telem_blink)
+    lcd.drawText(wgt.zone.x + myBatt.w + 12 +  wgt.border_l, wgt.zone.y + 30, string.format("%2.0f %%", wgt.vPercent), MIDSIZE + wgt.text_color + wgt.no_telem_blink)
+    lcd.drawText(wgt.zone.x + wgt.zone.w - 5 - wgt.border_r, wgt.zone.y + wgt.zone.h - 55, wgt.options.source_name, RIGHT + SMLSIZE + wgt.text_color + wgt.no_telem_blink)
     if wgt.options.Show_Total_Voltage == 0 then
-        lcd.drawText(wgt.zone.x + wgt.zone.w - 5, wgt.zone.y + wgt.zone.h - 35, string.format("%2.2fV %dS", wgt.secondaryValue, wgt.cellCount), RIGHT + SMLSIZE + wgt.text_color + wgt.no_telem_blink)
+        lcd.drawText(wgt.zone.x + wgt.zone.w - 5 - wgt.border_r, wgt.zone.y + wgt.zone.h - 35, string.format("%2.2fV %dS", wgt.secondaryValue, wgt.cellCount), RIGHT + SMLSIZE + wgt.text_color + wgt.no_telem_blink)
     else
         --lcd.drawText(wgt.zone.x, wgt.zone.y + 40, string.format("%2.2fV", wgt.mainValue), DBLSIZE + wgt.text_color + wgt.no_telem_blink)
     end
-    lcd.drawText(wgt.zone.x + wgt.zone.w - 5, wgt.zone.y + wgt.zone.h - 20, string.format("Min %2.2fV", wgt.vMin), RIGHT + SMLSIZE + wgt.text_color + wgt.no_telem_blink)
+    lcd.drawText(wgt.zone.x + wgt.zone.w - 5 - wgt.border_r, wgt.zone.y + wgt.zone.h - 20, string.format("Min %2.2fV", wgt.vMin), RIGHT + SMLSIZE + wgt.text_color + wgt.no_telem_blink)
 
     -- more info if 1/4 is high enough (without trim & slider)
     if wgt.zone.h > 80 then
@@ -524,6 +583,40 @@ local function background(wgt)
     wgt.tools.detectResetEvent(wgt, onTelemetryResetEvent)
 
     calculateBatteryData(wgt)
+
+    -- smoothen vPercent (eratic as function of voltage)
+    updateFilteredvPercent(wgt)
+
+    -- voice alerts
+    if wgt.isDataAvailable then
+        local fvpcnt = getFilteredvPercent(wgt)
+
+        -- what do we have to report?
+        local battva = 0
+        if fvpcnt > battLow then
+            battva = math.ceil(fvpcnt / 10) * 10
+        else
+            battva = fvpcnt
+        end
+
+        -- time to report?
+        if wgt.battPercentPlayed > battva and getTime() > wgt.battNextPlay then
+
+            -- urgent?
+            if battva > battLow then
+                playAudio("battry")
+            elseif battva > battCritical then
+                playAudio("batlow")
+            else
+                playAudio("batcrt")
+            end
+
+            playNumber(battva, 13)
+
+            wgt.battPercentPlayed = battva
+            wgt.battNextPlay = getTime() + 500
+        end
+    end
 end
 
 local function refresh(wgt, event, touchState)
@@ -537,11 +630,13 @@ local function refresh(wgt, event, touchState)
     background(wgt)
 
     if wgt.isDataAvailable then
-        wgt.no_telem_blink = 0
+        -- wgt.no_telem_blink = 0
         wgt.text_color = wgt.options.Color
+        wgt.cell_color = wgt.options.Cell_Color
     else
-        wgt.no_telem_blink = INVERS + BLINK
+        -- wgt.no_telem_blink = INVERS + BLINK
         wgt.text_color = GREY
+        wgt.cell_color = GREY
     end
 
     if (event ~= nil) then
