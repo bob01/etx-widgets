@@ -178,7 +178,7 @@ local function create(zone, options)
 
         vflt = {},
         vflti = 0,
-        vfltNextUpdate = 0
+        vfltNextUpdate = 0,
     }
 
     -- imports
@@ -194,16 +194,7 @@ local function playAudio(f)
     playFile(AUDIO_PATH .. f .. ".wav")
 end
 
--- smoothen vPercent, sample every 1/10s, collect last 10s
-local function updateFilteredvPercent(wgt)
-    if wgt.isDataAvailable and getTime() > wgt.vfltNextUpdate then
-        wgt.vflt[wgt.vflti + 1] = wgt.vPercent
-        wgt.vflti = (wgt.vflti + 1) % wgt.options.Samples
-
-        wgt.vfltNextUpdate = getTime() + wgt.options.Interval
-    end
-end
-
+-- smoothen vPercent, sample every 1/10s, collect last N seconds
 local function getFilteredvPercent(wgt)
     local count = #wgt.vflt
     if count == 0 then
@@ -215,6 +206,17 @@ local function getFilteredvPercent(wgt)
         sum = sum + wgt.vflt[i]
     end
     return math.ceil(sum / count)
+end
+
+local function updateFilteredvPercent(wgt, vPercent)
+    if vPercent > 0 and getTime() > wgt.vfltNextUpdate then
+        wgt.vflt[wgt.vflti + 1] = vPercent
+        wgt.vflti = (wgt.vflti + 1) % wgt.options.Samples
+
+        wgt.vfltNextUpdate = getTime() + wgt.options.Interval
+    end
+
+    return getFilteredvPercent(wgt)
 end
 
 -- clear old telemetry data upon reset event
@@ -344,7 +346,7 @@ local function calculateBatteryData(wgt)
             wgt.cellCount = newCellCount
         else
             local duration_passed = wgt.tools.periodicGetElapsedTime(wgt.periodic1)
-            log(string.format("detecting cells: %ss, %d/%d msec", newCellCount, duration_passed, wgt.tools.getDurationMili(wgt.periodic1)))
+            --log(string.format("detecting cells: %ss, %d/%d msec", newCellCount, duration_passed, wgt.tools.getDurationMili(wgt.periodic1)))
 
             -- this is necessary for simu where cell-count can change
             if newCellCount ~= wgt.cellCount then
@@ -362,7 +364,7 @@ local function calculateBatteryData(wgt)
 
     wgt.vTotalLive = v
     wgt.vCellLive = wgt.vTotalLive / wgt.cellCount
-    wgt.vPercent = getCellPercent(wgt, wgt.vCellLive)
+    wgt.vPercent = updateFilteredvPercent(wgt, getCellPercent(wgt, wgt.vCellLive))
 
     -- log("wgt.vCellLive: ".. wgt.vCellLive)
     -- log("wgt.vPercent: ".. wgt.vPercent)
@@ -370,8 +372,7 @@ local function calculateBatteryData(wgt)
     -- mainValue
     --if wgt.options.Show_Total_Voltage == 0 then
         wgt.mainValue = wgt.vCellLive
-        --wgt.secondaryValue = wgt.vTotalLive
-        wgt.secondaryValue = #wgt.vflt
+        wgt.secondaryValue = wgt.vTotalLive
     --[[
     elseif wgt.options.Show_Total_Voltage == 1 then
         wgt.mainValue = wgt.vTotalLive
@@ -605,12 +606,9 @@ local function background(wgt)
 
     calculateBatteryData(wgt)
 
-    -- smoothen vPercent (eratic as function of voltage)
-    updateFilteredvPercent(wgt)
-
     -- voice alerts
     if wgt.isDataAvailable then
-        local fvpcnt = getFilteredvPercent(wgt)
+        local fvpcnt = wgt.vPercent
 
         -- what do we have to report?
         local battva = 0
@@ -621,7 +619,7 @@ local function background(wgt)
         end
 
         -- time to report?
-        if wgt.battPercentPlayed > battva and getTime() > wgt.battNextPlay then
+        if wgt.battPercentPlayed ~= battva and getTime() > wgt.battNextPlay then
 
             -- urgent?
             if battva > battLow then
