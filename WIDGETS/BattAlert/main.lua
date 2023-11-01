@@ -39,7 +39,7 @@
 -- Voice alerts added, kill the blink, brighter battery colors + line
 -- Author: Robert Gayle (bob00@rogers.com)
 -- Date: 2023
--- ver: 0.5.3
+-- ver: 0.5.4
 
 local app_name = "BattAlert"
 
@@ -54,8 +54,10 @@ local _options = {
     { "Sensor"            , SOURCE, 0      }, -- default to 'A1'
     { "Color"             , COLOR , YELLOW },
     { "Cell_Color"        , COLOR , WHITE  },
-    { "Show_Total_Voltage", BOOL  , 0      }, -- 0=Show as average Lipo cell level, 1=show the total voltage (voltage as is)
-    { "Lithium_Ion"       , BOOL  , 0      }, -- 0=LIPO battery, 1=LI-ION (18650/21500)
+    --{ "Show_Total_Voltage", BOOL  , 0      }, -- 0=Show as average Lipo cell level, 1=show the total voltage (voltage as is)
+    { "Samples"           , VALUE, 100, 50, 1000 },
+    { "Interval"          , VALUE, 10, 10, 500 },
+    --{ "Lithium_Ion"       , BOOL  , 0      }, -- 0=LIPO battery, 1=LI-ION (18650/21500)
 }
 
 -- Data gathered from commercial lipo sensors
@@ -134,9 +136,14 @@ local function update(wgt, options)
         wgt.options.source_name = wgt.options.Sensor
     end
 
-    wgt.options.Show_Total_Voltage = wgt.options.Show_Total_Voltage % 2 -- modulo due to bug that cause the value to be other than 0|1
+    -- wgt.options.Show_Total_Voltage = wgt.options.Show_Total_Voltage % 2 -- modulo due to bug that cause the value to be other than 0|1
 
-    log(string.format("wgt.options.Lithium_Ion: %s", wgt.options.Lithium_Ion))
+    -- log(string.format("wgt.options.Lithium_Ion: %s", wgt.options.Lithium_Ion))
+
+    -- reset vflt
+    wgt.vflt = {}
+    wgt.vflti = 0
+    wgt.vfltNextUpdate = 0
 end
 
 local function create(zone, options)
@@ -191,9 +198,9 @@ end
 local function updateFilteredvPercent(wgt)
     if wgt.isDataAvailable and getTime() > wgt.vfltNextUpdate then
         wgt.vflt[wgt.vflti + 1] = wgt.vPercent
-        wgt.vflti = (wgt.vflti + 1) % 100
+        wgt.vflti = (wgt.vflti + 1) % wgt.options.Samples
 
-        wgt.vfltNextUpdate = getTime() + 10
+        wgt.vfltNextUpdate = getTime() + wgt.options.Interval
     end
 end
 
@@ -243,9 +250,9 @@ local function getCellPercent(wgt, cellValue)
     end
 
     local _percentListSplit = _lipoPercentListSplit
-    if wgt.options.Lithium_Ion == 1 then
-        _percentListSplit = _liionPercentListSplit
-    end
+    --if wgt.options.Lithium_Ion == 1 then
+    --    _percentListSplit = _liionPercentListSplit
+    --end
 
     for i1, v1 in ipairs(_percentListSplit) do
         --log(string.format("sub-list#: %s, head:%f, length: %d, last: %.3f", i1,v1[1][1], #v1, v1[#v1][1]))
@@ -361,9 +368,11 @@ local function calculateBatteryData(wgt)
     -- log("wgt.vPercent: ".. wgt.vPercent)
 
     -- mainValue
-    if wgt.options.Show_Total_Voltage == 0 then
+    --if wgt.options.Show_Total_Voltage == 0 then
         wgt.mainValue = wgt.vCellLive
-        wgt.secondaryValue = wgt.vTotalLive
+        --wgt.secondaryValue = wgt.vTotalLive
+        wgt.secondaryValue = #wgt.vflt
+    --[[
     elseif wgt.options.Show_Total_Voltage == 1 then
         wgt.mainValue = wgt.vTotalLive
         wgt.secondaryValue = wgt.vCellLive
@@ -371,6 +380,7 @@ local function calculateBatteryData(wgt)
         wgt.mainValue = "-1"
         wgt.secondaryValue = "-2"
     end
+    --]]
 
     --- calc lowest main voltage
     if wgt.mainValue < wgt.vMin and wgt.mainValue > 1 then
@@ -505,11 +515,11 @@ local function refreshZoneMedium(wgt)
     lcd.drawText(wgt.zone.x + myBatt.w + 10 +  wgt.border_l, wgt.zone.y, string.format("%2.2f V", wgt.mainValue), DBLSIZE + wgt.text_color + wgt.no_telem_blink)
     lcd.drawText(wgt.zone.x + myBatt.w + 12 +  wgt.border_l, wgt.zone.y + 30, string.format("%2.0f %%", wgt.vPercent), MIDSIZE + wgt.text_color + wgt.no_telem_blink)
     lcd.drawText(wgt.zone.x + wgt.zone.w - 5 - wgt.border_r, wgt.zone.y + wgt.zone.h - 55, wgt.options.source_name, RIGHT + SMLSIZE + wgt.text_color + wgt.no_telem_blink)
-    if wgt.options.Show_Total_Voltage == 0 then
+    --if wgt.options.Show_Total_Voltage == 0 then
         lcd.drawText(wgt.zone.x + wgt.zone.w - 5 - wgt.border_r, wgt.zone.y + wgt.zone.h - 35, string.format("%2.2fV %dS", wgt.secondaryValue, wgt.cellCount), RIGHT + SMLSIZE + wgt.text_color + wgt.no_telem_blink)
-    else
+    --else
         --lcd.drawText(wgt.zone.x, wgt.zone.y + 40, string.format("%2.2fV", wgt.mainValue), DBLSIZE + wgt.text_color + wgt.no_telem_blink)
-    end
+    --end
     lcd.drawText(wgt.zone.x + wgt.zone.w - 5 - wgt.border_r, wgt.zone.y + wgt.zone.h - 20, string.format("Min %2.2fV", wgt.vMin), RIGHT + SMLSIZE + wgt.text_color + wgt.no_telem_blink)
 
     -- more info if 1/4 is high enough (without trim & slider)
@@ -636,7 +646,7 @@ local function refresh(wgt, event, touchState)
     if type(wgt) ~= "table" then return end
     if (wgt.options == nil) then return end
     if (wgt.zone == nil)    then return end
-    if (wgt.options.Show_Total_Voltage == nil) then return end
+    --if (wgt.options.Show_Total_Voltage == nil) then return end
 
     background(wgt)
 
