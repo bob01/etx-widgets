@@ -39,7 +39,7 @@
 -- Voice alerts added, kill the blink, brighter battery colors + line
 -- Author: Robert Gayle (bob00@rogers.com)
 -- Date: 2023
--- ver: 0.5.5
+-- ver: 0.5.5a
 
 local app_name = "BattAlert"
 
@@ -519,7 +519,7 @@ local function refreshZoneMedium(wgt)
     lcd.drawText(wgt.zone.x + myBatt.w + 12 +  wgt.border_l, wgt.zone.y + 30, string.format("%2.0f %%", wgt.vPercent), MIDSIZE + wgt.text_color + wgt.no_telem_blink)
     lcd.drawText(wgt.zone.x + wgt.zone.w - 5 - wgt.border_r, wgt.zone.y + wgt.zone.h - 55, wgt.options.source_name, RIGHT + SMLSIZE + wgt.text_color + wgt.no_telem_blink)
     --if wgt.options.Show_Total_Voltage == 0 then
-        lcd.drawText(wgt.zone.x + wgt.zone.w - 5 - wgt.border_r, wgt.zone.y + wgt.zone.h - 35, string.format("%2.2fV %d%s", wgt.secondaryValue, wgt.cellCount, wgt.cell_detected and "S" or "s"), RIGHT + SMLSIZE + wgt.text_color + wgt.no_telem_blink)
+        lcd.drawText(wgt.zone.x + wgt.zone.w - 5 - wgt.border_r, wgt.zone.y + wgt.zone.h - 35, string.format("%2.2fV %d%s", wgt.secondaryValue, wgt.cellCount, wgt.cell_detected and "S" or "?"), RIGHT + SMLSIZE + wgt.text_color + wgt.no_telem_blink)
     --else
         --lcd.drawText(wgt.zone.x, wgt.zone.y + 40, string.format("%2.2fV", wgt.mainValue), DBLSIZE + wgt.text_color + wgt.no_telem_blink)
     --end
@@ -540,7 +540,7 @@ local function refreshZoneLarge(wgt)
     lcd.drawText(wgt.zone.x + wgt.zone.w, wgt.zone.y + 40, wgt.vPercent .. " %", RIGHT + DBLSIZE + wgt.text_color)
 
     lcd.drawText(wgt.zone.x + wgt.zone.w, wgt.zone.y + wgt.zone.h - 53, wgt.options.source_name, RIGHT + SMLSIZE + wgt.text_color)
-    lcd.drawText(wgt.zone.x + wgt.zone.w, wgt.zone.y + wgt.zone.h - 35, string.format("%2.2fV %dS", wgt.secondaryValue, wgt.cellCount), RIGHT + SMLSIZE + wgt.text_color)
+    lcd.drawText(wgt.zone.x + wgt.zone.w, wgt.zone.y + wgt.zone.h - 35, string.format("%2.2fV %d%s", wgt.secondaryValue, wgt.cellCount, wgt.cell_detected and "S" or "?"), RIGHT + SMLSIZE + wgt.text_color)
     lcd.drawText(wgt.zone.x + wgt.zone.w, wgt.zone.y + wgt.zone.h - 20, string.format("min %2.2fV", wgt.vMin), RIGHT + SMLSIZE + wgt.text_color + wgt.no_telem_blink)
 
     drawBattery(wgt, myBatt)
