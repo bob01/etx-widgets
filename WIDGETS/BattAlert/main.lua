@@ -39,7 +39,7 @@
 -- Voice alerts added, kill the blink, brighter battery colors + line
 -- Author: Robert Gayle (bob00@rogers.com)
 -- Date: 2023
--- ver: 0.5.4
+-- ver: 0.5.5
 
 local app_name = "BattAlert"
 
@@ -237,6 +237,7 @@ local function onTelemetryResetEvent(wgt)
     wgt.vMax = 0
     wgt.cellCount = 1
     wgt.cell_detected = false
+    wgt.periodic1 = wgt.tools.periodicInit()
     --wgt.tools.periodicStart(wgt.periodic1, CELL_DETECTION_TIME * 1000)
 end
 
@@ -343,6 +344,7 @@ local function calculateBatteryData(wgt)
         local newCellCount = calcCellCount(wgt, v)
         if (wgt.tools.periodicHasPassed(wgt.periodic1)) then
             wgt.cell_detected = true
+            wgt.periodic1 = wgt.tools.periodicInit()
             wgt.cellCount = newCellCount
         else
             local duration_passed = wgt.tools.periodicGetElapsedTime(wgt.periodic1)
@@ -390,10 +392,10 @@ local function calculateBatteryData(wgt)
     end
 
     wgt.isDataAvailable = true
-    if wgt.cell_detected == true then
+    -- if need detection and not detecting, start detection
+    if not wgt.cell_detected and wgt.tools.getDurationMili(wgt.periodic1) == -1 then
         wgt.tools.periodicStart(wgt.periodic1, CELL_DETECTION_TIME * 1000)
     end
-
 
 end
 
@@ -517,7 +519,7 @@ local function refreshZoneMedium(wgt)
     lcd.drawText(wgt.zone.x + myBatt.w + 12 +  wgt.border_l, wgt.zone.y + 30, string.format("%2.0f %%", wgt.vPercent), MIDSIZE + wgt.text_color + wgt.no_telem_blink)
     lcd.drawText(wgt.zone.x + wgt.zone.w - 5 - wgt.border_r, wgt.zone.y + wgt.zone.h - 55, wgt.options.source_name, RIGHT + SMLSIZE + wgt.text_color + wgt.no_telem_blink)
     --if wgt.options.Show_Total_Voltage == 0 then
-        lcd.drawText(wgt.zone.x + wgt.zone.w - 5 - wgt.border_r, wgt.zone.y + wgt.zone.h - 35, string.format("%2.2fV %dS", wgt.secondaryValue, wgt.cellCount), RIGHT + SMLSIZE + wgt.text_color + wgt.no_telem_blink)
+        lcd.drawText(wgt.zone.x + wgt.zone.w - 5 - wgt.border_r, wgt.zone.y + wgt.zone.h - 35, string.format("%2.2fV %d%s", wgt.secondaryValue, wgt.cellCount, wgt.cell_detected and "S" or "s"), RIGHT + SMLSIZE + wgt.text_color + wgt.no_telem_blink)
     --else
         --lcd.drawText(wgt.zone.x, wgt.zone.y + 40, string.format("%2.2fV", wgt.mainValue), DBLSIZE + wgt.text_color + wgt.no_telem_blink)
     --end
