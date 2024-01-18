@@ -31,7 +31,7 @@ function M.periodicHasPassed(t)
     end
 
     local elapsed = getTime() - t.startTime;
-    log(string.format('elapsed: %d (t.durationMili: %d)', elapsed, t.durationMili))
+    -- log(string.format('elapsed: %d (t.durationMili: %d)', elapsed, t.durationMili))
     local elapsedMili = elapsed * 10;
     if (elapsedMili < t.durationMili) then
         return false;
@@ -41,9 +41,9 @@ end
 
 function M.periodicGetElapsedTime(t)
     local elapsed = getTime() - t.startTime;
-    log(string.format("elapsed: %d",elapsed));
+    -- log(string.format("elapsed: %d",elapsed));
     local elapsedMili = elapsed * 10;
-    log(string.format("elapsedMili: %d",elapsedMili));
+    -- log(string.format("elapsedMili: %d",elapsedMili));
     return elapsedMili;
 end
 
