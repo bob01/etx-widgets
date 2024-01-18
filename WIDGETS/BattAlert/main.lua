@@ -37,9 +37,10 @@
 -- ver: 0.5
 
 -- Voice alerts added, kill the blink, brighter battery colors + line
+-- Added consumption "power bar"
 -- Author: Robert Gayle (bob00@rogers.com)
 -- Date: 2023
--- ver: 0.5.5a
+-- ver: 0.6.0
 
 local app_name = "BattAlert"
 
@@ -52,8 +53,8 @@ local CELL_DETECTION_TIME = 8
 
 local _options = {
     { "Sensor"            , SOURCE, 0      }, -- default to 'A1'
-    { "Color"             , COLOR , YELLOW },
-    { "Cell_Color"        , COLOR , WHITE  },
+    { "SensorP"           , SOURCE, 0 },
+    { "SensorM"           , SOURCE, 0 },
     --{ "Show_Total_Voltage", BOOL  , 0      }, -- 0=Show as average Lipo cell level, 1=show the total voltage (voltage as is)
     { "Samples"           , VALUE, 100, 50, 1000 },
     { "Interval"          , VALUE, 10, 10, 500 },
@@ -136,6 +137,9 @@ local function update(wgt, options)
         wgt.options.source_name = wgt.options.Sensor
     end
 
+    wgt.useSensorP = wgt.options.SensorP ~= 0
+    wgt.useSensorM = wgt.options.SensorM ~= 0
+
     -- wgt.options.Show_Total_Voltage = wgt.options.Show_Total_Voltage % 2 -- modulo due to bug that cause the value to be other than 0|1
 
     -- log(string.format("wgt.options.Lithium_Ion: %s", wgt.options.Lithium_Ion))
@@ -167,6 +171,7 @@ local function create(zone, options)
         vMin = 0,
         vTotalLive = 0,
         vPercent = 0,
+        vMah = 0,
         cellCount = 1,
         cell_detected = false,
         vCellLive = 0,
@@ -179,6 +184,9 @@ local function create(zone, options)
         vflt = {},
         vflti = 0,
         vfltNextUpdate = 0,
+
+        useSensorP = false,
+        useSensorM = false,
     }
 
     -- imports
@@ -366,7 +374,16 @@ local function calculateBatteryData(wgt)
 
     wgt.vTotalLive = v
     wgt.vCellLive = wgt.vTotalLive / wgt.cellCount
-    wgt.vPercent = updateFilteredvPercent(wgt, getCellPercent(wgt, wgt.vCellLive))
+
+    if wgt.useSensorP then
+        wgt.vPercent = getValue(wgt.options.SensorP)
+    else
+        wgt.vPercent = updateFilteredvPercent(wgt, getCellPercent(wgt, wgt.vCellLive))
+    end
+
+    if wgt.useSensorM then
+        wgt.vMah = getValue(wgt.options.SensorM)
+    end
 
     -- log("wgt.vCellLive: ".. wgt.vCellLive)
     -- log("wgt.vPercent: ".. wgt.vPercent)
@@ -403,10 +420,10 @@ end
 -- color for battery
 -- This function returns green at 100%, red bellow 30% and graduate in between
 local function getPercentColor(percent)
-    if percent < 30 then
+    if percent < battCritical then
         -- red
         return lcd.RGB(0xff, 0, 0)
-    elseif percent < 70 then
+    elseif percent < battLow then
         -- yellow
         return lcd.RGB(0xff, 0xff, 0)
     else
@@ -486,7 +503,7 @@ local function refreshZoneTiny(wgt)
     lcd.drawText(wgt.zone.x + wgt.zone.w - 25, wgt.zone.y + 20, myString, RIGHT + SMLSIZE + wgt.text_color + wgt.no_telem_blink)
 
     -- draw battery
-    local batt_color = wgt.options.Color
+    local batt_color = wgt.text_color
     lcd.drawRectangle(wgt.zone.x + 50, wgt.zone.y + 9, 16, 25, batt_color, 2)
     lcd.drawFilledRectangle(wgt.zone.x + 50 + 4, wgt.zone.y + 7, 6, 3, batt_color)
     local rect_h = math.floor(25 * wgt.vPercent / 100)
@@ -502,11 +519,26 @@ local function refreshZoneSmall(wgt)
     lcd.drawGauge(myBatt.x, myBatt.y, myBatt.w, myBatt.h, wgt.vPercent, 100, fill_color)
 
     -- draw battery
-    lcd.drawRectangle(myBatt.x, myBatt.y, myBatt.w, myBatt.h, WHITE, 2)
+    lcd.drawRectangle(myBatt.x, myBatt.y, myBatt.w, myBatt.h, BLACK, 2)
+
+    -- lcd.drawText(myBatt.x, myBatt.y, myBatt.w, myBatt.h, , )
 
     -- write text
-    local topLine = string.format(" %2.2f V     %2.0f %%", wgt.mainValue, wgt.vPercent)
-    lcd.drawText(myBatt.x + 15, myBatt.y + 1, topLine, MIDSIZE + wgt.text_color + wgt.no_telem_blink)
+    if wgt.useSensorP then
+        local volts = string.format("%.1f v", wgt.vTotalLive);
+        lcd.drawText(myBatt.x + 8, myBatt.y + 4, volts, BOLD + LEFT  + wgt.text_color + wgt.no_telem_blink)
+
+        if wgt.useSensorM then
+            local mah = string.format("%.0f mah", wgt.vMah)
+            lcd.drawText(myBatt.x + 8, myBatt.y + myBatt.h / 2, mah, BOLD + LEFT  + wgt.text_color + wgt.no_telem_blink)
+        end
+
+        local percent = string.format("%.0f%%", wgt.vPercent)
+        lcd.drawText(myBatt.x + myBatt.w - 4, myBatt.y + myBatt.h / 2, percent, BOLD + VCENTER + RIGHT + MIDSIZE + wgt.text_color + wgt.no_telem_blink)
+    else
+        local topLine = string.format(" %2.2f V     %2.0f %%", wgt.mainValue, wgt.vPercent)
+        lcd.drawText(myBatt.x + 15, myBatt.y + 1, topLine, MIDSIZE + wgt.text_color + wgt.no_telem_blink)
+    end
 end
 
 --- Zone size: 180x70 1/4th  (with sliders/trim)
@@ -652,8 +684,8 @@ local function refresh(wgt, event, touchState)
 
     if wgt.isDataAvailable then
         -- wgt.no_telem_blink = 0
-        wgt.text_color = wgt.options.Color
-        wgt.cell_color = wgt.options.Cell_Color
+        wgt.text_color = BLACK
+        wgt.cell_color = BLACK
     else
         -- wgt.no_telem_blink = INVERS + BLINK
         wgt.text_color = GREY
