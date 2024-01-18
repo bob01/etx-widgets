@@ -102,7 +102,7 @@ local defaultSensor = "RxBt" -- RxBt / A1 / A3/ VFAS / Batt
 
 --------------------------------------------------------------
 local function log(s)
-    print("BattAnalog: " .. s)
+    -- print("BattAnalog: " .. s)
 end
 --------------------------------------------------------------
 
@@ -331,7 +331,7 @@ local function calculateBatteryData(wgt)
     elseif v ~= nil and v >= 1 then
         -- single cell or VFAS lipo sensor
         if fieldinfo then
-            log(wgt.options.source_name .. ", value: " .. fieldinfo.name .. "=" .. v)
+            -- log(wgt.options.source_name .. ", value: " .. fieldinfo.name .. "=" .. v)
         else
             log("only one cell using Ax lipo sensor")
         end
