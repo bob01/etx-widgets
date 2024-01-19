@@ -39,8 +39,8 @@
 -- Voice alerts added, kill the blink, brighter battery colors + line
 -- Added consumption "power bar"
 -- Author: Robert Gayle (bob00@rogers.com)
--- Date: 2023
--- ver: 0.6.0
+-- Date: 2024
+-- ver: 0.6.3
 
 local app_name = "BattAlert"
 
@@ -49,15 +49,17 @@ local AUDIO_PATH = "/SOUNDS/en/"
 local battLow = 30
 local battCritical = 20
 
-local CELL_DETECTION_TIME = 8
+local cellFull = 4.16
+
+local CELL_DETECTION_TIME = 10
 
 local _options = {
-    { "Sensor"            , SOURCE, 0      }, -- default to 'A1'
+    { "Sensor"            , SOURCE, 0 }, -- default to 'A1'
     { "SensorP"           , SOURCE, 0 },
     { "SensorM"           , SOURCE, 0 },
     --{ "Show_Total_Voltage", BOOL  , 0      }, -- 0=Show as average Lipo cell level, 1=show the total voltage (voltage as is)
     { "Samples"           , VALUE, 100, 50, 1000 },
-    { "Interval"          , VALUE, 10, 10, 500 },
+    { "Interval"          , VALUE, 10, 4, 500 },
     --{ "Lithium_Ion"       , BOOL  , 0      }, -- 0=LIPO battery, 1=LI-ION (18650/21500)
 }
 
@@ -114,6 +116,7 @@ local function update(wgt, options)
     wgt.options = options
     wgt.periodic1 = wgt.tools.periodicInit()
     wgt.cell_detected = false
+    wgt.low_batt_blink = 0
 
     -- use default if user did not set, So widget is operational on "select widget"
     if wgt.options.Sensor == 0 then
@@ -139,6 +142,10 @@ local function update(wgt, options)
 
     wgt.useSensorP = wgt.options.SensorP ~= 0
     wgt.useSensorM = wgt.options.SensorM ~= 0
+
+    if wgt.useSensorP then
+        wgt.cellDetectionTime = wgt.options.Interval
+    end
 
     -- wgt.options.Show_Total_Voltage = wgt.options.Show_Total_Voltage % 2 -- modulo due to bug that cause the value to be other than 0|1
 
@@ -174,6 +181,7 @@ local function create(zone, options)
         vMah = 0,
         cellCount = 1,
         cell_detected = false,
+        low_batt_blink = 0,
         vCellLive = 0,
         mainValue = 0,
         secondaryValue = 0,
@@ -187,6 +195,8 @@ local function create(zone, options)
 
         useSensorP = false,
         useSensorM = false,
+
+        cellDetectionTime = CELL_DETECTION_TIME,
     }
 
     -- imports
@@ -245,6 +255,7 @@ local function onTelemetryResetEvent(wgt)
     wgt.vMax = 0
     wgt.cellCount = 1
     wgt.cell_detected = false
+    wgt.low_batt_blink = 0
     wgt.periodic1 = wgt.tools.periodicInit()
     --wgt.tools.periodicStart(wgt.periodic1, CELL_DETECTION_TIME * 1000)
 end
@@ -354,6 +365,12 @@ local function calculateBatteryData(wgt)
             wgt.cell_detected = true
             wgt.periodic1 = wgt.tools.periodicInit()
             wgt.cellCount = newCellCount
+            if (v / newCellCount) >= cellFull then
+                wgt.low_batt_blink = 0
+            else
+                playAudio("batlow")
+                playNumber(v * 10, 1, PREC1)
+            end
         else
             local duration_passed = wgt.tools.periodicGetElapsedTime(wgt.periodic1)
             --log(string.format("detecting cells: %ss, %d/%d msec", newCellCount, duration_passed, wgt.tools.getDurationMili(wgt.periodic1)))
@@ -364,6 +381,8 @@ local function calculateBatteryData(wgt)
                 wgt.vMax = 0
             end
             wgt.cellCount = newCellCount
+
+            wgt.low_batt_blink = BLINK
         end
     end
 
@@ -411,7 +430,7 @@ local function calculateBatteryData(wgt)
     wgt.isDataAvailable = true
     -- if need detection and not detecting, start detection
     if not wgt.cell_detected and wgt.tools.getDurationMili(wgt.periodic1) == -1 then
-        wgt.tools.periodicStart(wgt.periodic1, CELL_DETECTION_TIME * 1000)
+        wgt.tools.periodicStart(wgt.periodic1, wgt.cellDetectionTime * 1000)
     end
 
 end
@@ -519,14 +538,15 @@ local function refreshZoneSmall(wgt)
     lcd.drawGauge(myBatt.x, myBatt.y, myBatt.w, myBatt.h, wgt.vPercent, 100, fill_color)
 
     -- draw battery
-    lcd.drawRectangle(myBatt.x, myBatt.y, myBatt.w, myBatt.h, BLACK, 2)
+    lcd.drawRectangle(myBatt.x, myBatt.y, myBatt.w, myBatt.h, wgt.text_color, 2)
 
     -- lcd.drawText(myBatt.x, myBatt.y, myBatt.w, myBatt.h, , )
 
     -- write text
     if wgt.useSensorP then
+        -- power bar
         local volts = string.format("%.1f v", wgt.vTotalLive);
-        lcd.drawText(myBatt.x + 8, myBatt.y + 4, volts, BOLD + LEFT  + wgt.text_color + wgt.no_telem_blink)
+        lcd.drawText(myBatt.x + 8, myBatt.y + 4, volts, BOLD + LEFT  + wgt.text_color + wgt.no_telem_blink + wgt.low_batt_blink)
 
         if wgt.useSensorM then
             local mah = string.format("%.0f mah", wgt.vMah)
@@ -534,8 +554,9 @@ local function refreshZoneSmall(wgt)
         end
 
         local percent = string.format("%.0f%%", wgt.vPercent)
-        lcd.drawText(myBatt.x + myBatt.w - 4, myBatt.y + myBatt.h / 2, percent, BOLD + VCENTER + RIGHT + MIDSIZE + wgt.text_color + wgt.no_telem_blink)
+        lcd.drawText(myBatt.x + myBatt.w - 4, myBatt.y + myBatt.h / 2, percent, BOLD + VCENTER + RIGHT + MIDSIZE + wgt.text_color + wgt.no_telem_blink + wgt.low_batt_blink)
     else
+        -- standard
         local topLine = string.format(" %2.2f V     %2.0f %%", wgt.mainValue, wgt.vPercent)
         lcd.drawText(myBatt.x + 15, myBatt.y + 1, topLine, MIDSIZE + wgt.text_color + wgt.no_telem_blink)
     end
@@ -650,6 +671,11 @@ local function background(wgt)
             battva = math.ceil(fvpcnt / 10) * 10
         else
             battva = fvpcnt
+        end
+
+        -- silence until cell_detected
+        if not wgt.cell_detected then
+            wgt.battPercentPlayed = battva
         end
 
         -- time to report?
