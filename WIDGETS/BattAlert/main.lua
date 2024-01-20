@@ -40,7 +40,7 @@
 -- Added consumption "power bar"
 -- Author: Robert Gayle (bob00@rogers.com)
 -- Date: 2024
--- ver: 0.6.3
+-- ver: 0.6.4
 
 local app_name = "BattAlert"
 
@@ -531,7 +531,7 @@ end
 
 --- Zone size: 160x32 1/8th
 local function refreshZoneSmall(wgt)
-    local myBatt = { ["x"] = 5, ["y"] = 5, ["w"] = wgt.zone.w - 10, ["h"] = wgt.zone.h - 9, ["segments_w"] = 25, ["color"] = WHITE, ["cath_w"] = 6, ["cath_h"] = 20 }
+    local myBatt = { ["x"] = 4, ["y"] = 4, ["w"] = wgt.zone.w - 8, ["h"] = wgt.zone.h - 8, ["segments_w"] = 25, ["color"] = WHITE, ["cath_w"] = 6, ["cath_h"] = 20 }
 
     -- fill battery
     local fill_color = getPercentColor(wgt.vPercent)
