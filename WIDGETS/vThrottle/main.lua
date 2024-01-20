@@ -59,6 +59,9 @@ local function create(zone, options)
         cell_color = 0,
 
         isDataAvailable = false,
+
+        fmode = "",
+        throttle = ""
     }
 
     -- imports
@@ -74,40 +77,51 @@ local function refreshZoneSmall(wgt)
     local cell = { ["x"] = 5, ["y"] = 4, ["w"] = wgt.zone.w - 4, ["h"] = wgt.zone.h - 8 }
 
     -- draw
-    lcd.drawText(cell.x, cell.y, CHAR_TELEMETRY .. "Throttle", LEFT  + wgt.text_color)
+    local rx = cell.x + cell.w - 6
 
-    local val = string.format("%.0f%%", 0)
-    local _,vh = lcd.sizeText(val, BOLD + MIDSIZE)
-    lcd.drawText(cell.x + cell.w - 6, cell.y + cell.h - vh, val, BOLD + RIGHT + MIDSIZE + wgt.text_color)
+    lcd.drawText(cell.x, cell.y, CHAR_TELEMETRY .. "Throttle", LEFT + wgt.text_color)
 
-    -- -- write text
-    -- if wgt.useSensorP then
-    --     -- power bar
-    --     local volts = string.format("%.1f v", wgt.vTotalLive);
-    --     lcd.drawText(cell.x + 8, cell.y + 4, volts, BOLD + LEFT  + wgt.text_color + wgt.no_telem_blink + wgt.low_batt_blink)
+    if(wgt.isDataAvailable) then
+        lcd.drawText(rx, cell.y, wgt.fmode, RIGHT + wgt.text_color)
+    end
 
-    --     if wgt.useSensorM then
-    --         local mah = string.format("%.0f mah", wgt.vMah)
-    --         lcd.drawText(cell.x + 8, cell.y + cell.h / 2, mah, BOLD + LEFT  + wgt.text_color + wgt.no_telem_blink)
-    --     end
-
-    --     local percent = string.format("%.0f%%", wgt.vPercent)
-    --     lcd.drawText(cell.x + cell.w - 4, cell.y + cell.h / 2, percent, BOLD + VCENTER + RIGHT + MIDSIZE + wgt.text_color + wgt.no_telem_blink + wgt.low_batt_blink)
-    -- else
-    --     -- standard
-    --     local topLine = string.format(" %2.2f V     %2.0f %%", wgt.mainValue, wgt.vPercent)
-    --     lcd.drawText(cell.x + 15, cell.y + 1, topLine, MIDSIZE + wgt.text_color + wgt.no_telem_blink)
-    -- end
+    local _,vh = lcd.sizeText(wgt.throttle, BOLD + MIDSIZE)
+    lcd.drawText(rx, cell.y + wgt.zone.h - vh, wgt.throttle, BOLD + RIGHT + MIDSIZE + wgt.text_color)
 end
 
 -- This function allow recording of lowest cells when widget is in background
 local function background(wgt)
 
-    local val = nil
-    -- if(wgt.options.EscPWM ~= 0) then
-        val = getValue(wgt.options.EscPWM)
-    -- end
-    log("val: " .. val)
+    -- assume telemetry not available
+    wgt.isDataAvailable = false
+
+    if wgt.options.FlightMode ~= 0 then
+        local fm = getValue(wgt.options.FlightMode)
+        wgt.isDataAvailable = type(fm) == "string"
+
+        if(wgt.isDataAvailable) then
+            if string.find(fm, "*") ~= nil then
+                if wgt.options.EscPWM ~= 0 then
+                    local thro = getValue(wgt.options.EscPWM)
+                    wgt.throttle = string.format("%d%%", thro)
+                else
+                    wgt.throttle = "--"
+                end
+            else
+                wgt.throttle = "Safe"
+            end
+            wgt.fmode = fm
+        else
+            wgt.throttle = "Safe"
+            wgt.fmode = ""
+        end
+    end
+
+    -- local val = nil
+    -- -- if(wgt.options.EscPWM ~= 0) then
+    --     val = getValue(wgt.options.FlightMode)
+    -- -- end
+    -- log("val: " .. val)
     
 end
 
