@@ -112,7 +112,7 @@ local function background(wgt)
             end
             wgt.fmode = fm
         else
-            wgt.throttle = "Safe"
+            wgt.throttle = "**"
             wgt.fmode = ""
         end
     end
