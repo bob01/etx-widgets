@@ -23,7 +23,7 @@
 -- Designed for 1/8 cell
 -- Author: Robert Gayle (bob00@rogers.com)
 -- Date: 2024
--- ver: 0.1.0
+-- ver: 0.2.0
 
 local app_name = "vThrottle"
 
@@ -32,6 +32,7 @@ local AUDIO_PATH = "/SOUNDS/en/"
 local _options = {
     { "EscPWM"            , SOURCE, 0 },
     { "FlightMode"        , SOURCE, 0 },
+    { "Voice"             , BOOL, 1 },
 }
 
 local defaultSensor = "RxBt" -- RxBt / A1 / A3/ VFAS / Batt
@@ -61,7 +62,9 @@ local function create(zone, options)
         isDataAvailable = false,
 
         fmode = "",
-        throttle = ""
+        throttle = "",
+
+        armed = false,
     }
 
     -- imports
@@ -70,6 +73,11 @@ local function create(zone, options)
 
     update(wgt, options)
     return wgt
+end
+
+-- audio support
+local function playAudio(f)
+    playFile(AUDIO_PATH .. f .. ".wav")
 end
 
 --- Zone size: 160x32 1/8th
@@ -95,34 +103,54 @@ local function background(wgt)
     -- assume telemetry not available
     wgt.isDataAvailable = false
 
+    -- configured?
+    local fm
     if wgt.options.FlightMode ~= 0 then
-        local fm = getValue(wgt.options.FlightMode)
+        -- configured, try to fetch telemetry value - will be 0 (number) if not connected
+        fm = getValue(wgt.options.FlightMode)
         wgt.isDataAvailable = type(fm) == "string"
-
-        if(wgt.isDataAvailable) then
-            if string.find(fm, "*") ~= nil then
-                if wgt.options.EscPWM ~= 0 then
-                    local thro = getValue(wgt.options.EscPWM)
-                    wgt.throttle = string.format("%d%%", thro)
-                else
-                    wgt.throttle = "--"
-                end
-            else
-                wgt.throttle = "Safe"
-            end
-            wgt.fmode = fm
-        else
-            wgt.throttle = "**"
-            wgt.fmode = ""
-        end
     end
 
-    -- local val = nil
-    -- -- if(wgt.options.EscPWM ~= 0) then
-    --     val = getValue(wgt.options.FlightMode)
-    -- -- end
-    -- log("val: " .. val)
-    
+    -- connected?
+    if wgt.isDataAvailable then
+        -- connected
+        -- armed?
+        local armed = string.find(fm, "*") ~= nil
+        if armed then
+            -- armed, get ESC throttle if configured
+            if wgt.options.EscPWM ~= 0 then
+                local thro = getValue(wgt.options.EscPWM)
+                wgt.throttle = string.format("%d%%", thro)
+            else
+                wgt.throttle = "--"
+            end
+
+        else
+            -- not armed
+            wgt.throttle = "Safe"
+        end
+
+        -- keep value for display
+        wgt.fmode = fm
+
+        -- announce if armed state changed
+        if wgt.armed ~= armed and wgt.options.Voice == 1 then
+            if armed then
+                playAudio("armed")
+            else
+                playAudio("disarm")
+            end
+            wgt.armed = armed
+        end
+
+    else
+        -- not connected
+        wgt.throttle = "**"
+        wgt.fmode = ""
+
+        -- reset last armed
+        wgt.armed = false
+    end
 end
 
 local function refresh(wgt, event, touchState)
