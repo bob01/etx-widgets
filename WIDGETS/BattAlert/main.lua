@@ -40,7 +40,7 @@
 -- Added consumption "power bar"
 -- Author: Robert Gayle (bob00@rogers.com)
 -- Date: 2024
--- ver: 0.6.4
+-- ver: 0.6.5
 
 local app_name = "BattAlert"
 
@@ -545,7 +545,7 @@ local function refreshZoneSmall(wgt)
     -- write text
     if wgt.useSensorP then
         -- power bar
-        local volts = string.format("%.1f v", wgt.vTotalLive);
+        local volts = string.format("%.1f v / %.2f v", wgt.vTotalLive, wgt.vCellLive);
         lcd.drawText(myBatt.x + 8, myBatt.y + 4, volts, BOLD + LEFT  + wgt.text_color + wgt.no_telem_blink + wgt.low_batt_blink)
 
         if wgt.useSensorM then
