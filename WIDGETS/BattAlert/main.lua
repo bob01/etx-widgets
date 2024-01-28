@@ -58,7 +58,7 @@ local _options = {
     { "SensorP"           , SOURCE, 0 },
     { "SensorM"           , SOURCE, 0 },
     --{ "Show_Total_Voltage", BOOL  , 0      }, -- 0=Show as average Lipo cell level, 1=show the total voltage (voltage as is)
-    { "Samples"           , VALUE, 100, 50, 1000 },
+    { "Samples"           , VALUE, 30, 0, 1000 },
     { "Interval"          , VALUE, 10, 4, 500 },
     --{ "Lithium_Ion"       , BOOL  , 0      }, -- 0=LIPO battery, 1=LI-ION (18650/21500)
 }
@@ -145,6 +145,13 @@ local function update(wgt, options)
 
     if wgt.useSensorP then
         wgt.cellDetectionTime = wgt.options.Interval
+        if wgt.options.Samples < 50 then
+            wgt.vReserve = wgt.options.Samples
+        else
+            wgt.vReserve = 0
+        end
+    else
+        wgt.vReserve = 0
     end
 
     -- wgt.options.Show_Total_Voltage = wgt.options.Show_Total_Voltage % 2 -- modulo due to bug that cause the value to be other than 0|1
@@ -178,6 +185,7 @@ local function create(zone, options)
         vMin = 0,
         vTotalLive = 0,
         vPercent = 0,
+        vReserve = 20,
         vMah = 0,
         cellCount = 1,
         cell_detected = false,
@@ -395,7 +403,13 @@ local function calculateBatteryData(wgt)
     wgt.vCellLive = wgt.vTotalLive / wgt.cellCount
 
     if wgt.useSensorP then
-        wgt.vPercent = getValue(wgt.options.SensorP)
+        local pcnt = getValue(wgt.options.SensorP)
+        if pcnt < wgt.vReserve then
+            wgt.vPercent = pcnt - wgt.vReserve
+        else
+            local usable = 100 - wgt.vReserve
+            wgt.vPercent = (pcnt - wgt.vReserve) / usable * 100
+        end
     else
         wgt.vPercent = updateFilteredvPercent(wgt, getCellPercent(wgt, wgt.vCellLive))
     end
@@ -538,7 +552,7 @@ local function refreshZoneSmall(wgt)
     lcd.drawGauge(myBatt.x, myBatt.y, myBatt.w, myBatt.h, wgt.vPercent, 100, fill_color)
 
     -- draw battery
-    lcd.drawRectangle(myBatt.x, myBatt.y, myBatt.w, myBatt.h, wgt.text_color, 2)
+    lcd.drawRectangle(myBatt.x, myBatt.y, myBatt.w + 1, myBatt.h, wgt.text_color, 2)
 
     -- lcd.drawText(myBatt.x, myBatt.y, myBatt.w, myBatt.h, , )
 
@@ -679,7 +693,7 @@ local function background(wgt)
         end
 
         -- time to report?
-        if wgt.battPercentPlayed ~= battva and getTime() > wgt.battNextPlay then
+        if (wgt.battPercentPlayed ~= battva or battva <= 0) and getTime() > wgt.battNextPlay then
 
             -- urgent?
             if battva > battLow then
@@ -690,7 +704,10 @@ local function background(wgt)
                 playAudio("batcrt")
             end
 
-            playNumber(battva, 13)
+            -- play % if >= 0
+            if battva >= 0 then
+                playNumber(battva, 13)
+            end
 
             wgt.battPercentPlayed = battva
             wgt.battNextPlay = getTime() + 500
