@@ -40,7 +40,7 @@
 -- Added consumption "power bar"
 -- Author: Robert Gayle (bob00@rogers.com)
 -- Date: 2024
--- ver: 0.6.5
+-- ver: 0.6.7
 
 local app_name = "BattAlert"
 
@@ -681,7 +681,7 @@ local function background(wgt)
 
         -- what do we have to report?
         local battva = 0
-        if fvpcnt > battLow then
+        if fvpcnt > battCritical then
             battva = math.ceil(fvpcnt / 10) * 10
         else
             battva = fvpcnt
