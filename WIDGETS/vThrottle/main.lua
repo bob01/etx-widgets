@@ -21,9 +21,9 @@
 
 -- Throttle and arm state display for RotorFlight
 -- Designed for 1/8 cell
--- Author: Robert Gayle (bob00@rogers.com)
+-- Author: Rob Gayle (bob00@rogers.com)
 -- Date: 2024
--- ver: 0.3.0
+-- ver: 0.4.0
 
 local app_name = "vThrottle"
 

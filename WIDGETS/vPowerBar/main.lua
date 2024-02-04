@@ -31,6 +31,7 @@
 
 ]]
 
+-- Based on...
 -- Widget to display the levels of Lipo battery from single analog source
 -- Author : Offer Shmuely
 -- Date: 2021-2023
@@ -38,11 +39,12 @@
 
 -- Voice alerts added, kill the blink, brighter battery colors + line
 -- Added consumption "power bar"
--- Author: Robert Gayle (bob00@rogers.com)
+-- friendlier UI, new name (vPowerBar), specify cell count option
+-- Author: Rob Gayle (bob00@rogers.com)
 -- Date: 2024
--- ver: 0.6.7
+-- ver: 0.7.0
 
-local app_name = "BattAlert"
+local app_name = "vPowerBar"
 
 local AUDIO_PATH = "/SOUNDS/en/"
 
@@ -52,6 +54,8 @@ local battCritical = 20
 local cellFull = 4.16
 
 local CELL_DETECTION_TIME = 10
+local VFLT_SAMPLES_DEFAULT = 150
+local VFLT_INTERVAL_DEFAULT = 10
 
 local _options = {
     { "VoltSensor"            , SOURCE, 0 }, -- default to 'A1'
@@ -59,7 +63,7 @@ local _options = {
     { "MahSensor"             , SOURCE, 0 },
     --{ "Show_Total_Voltage", BOOL  , 0      }, -- 0=Show as average Lipo cell level, 1=show the total voltage (voltage as is)
     { "Reserve"               , VALUE, 20, 0, 1000 },   -- reserve (or filter samples if calc percentage)
-    { "InitDelay"             , VALUE, 8, 4, 500 },     -- cell detection time (or interval if calc perceentage)
+    { "Cells"                 , VALUE, 0, 0, 14 },      -- cell detection time (or interval if calc perceentage)
     --{ "Lithium_Ion"       , BOOL  , 0      }, -- 0=LIPO battery, 1=LI-ION (18650/21500)
 }
 
@@ -115,8 +119,17 @@ local function update(wgt, options)
 
     wgt.options = options
     wgt.periodic1 = wgt.tools.periodicInit()
-    wgt.cell_detected = false
     wgt.low_batt_blink = 0
+
+    if wgt.options.Cells == 0 then
+        -- auto cell detection
+        wgt.cellCount = 1
+        wgt.cell_detected = false
+    else
+        -- use cell settings
+        wgt.cellCount = wgt.options.Cells
+        wgt.cell_detected = true
+    end
 
     -- use default if user did not set, So widget is operational on "select widget"
     if wgt.options.VoltSensor == 0 then
@@ -145,7 +158,6 @@ local function update(wgt, options)
 
     if wgt.useSensorP then
         -- using telemetry for battery %
-        wgt.cellDetectionTime = wgt.options.InitDelay
         if wgt.options.Reserve < 50 then
             wgt.vReserve = wgt.options.Reserve
         else
@@ -153,9 +165,17 @@ local function update(wgt, options)
         end
     else
         -- estimating battery %
-        wgt.cellDetectionTime = CELL_DETECTION_TIME
-        wgt.vfltInterval = wgt.options.InitDelay
-        wgt.vfltSamples = wgt.options.Reserve
+        if wgt.options.Cells ~= 0 then
+            wgt.vfltInterval = wgt.options.Cells
+        else
+            wgt.vfltInterval = VFLT_INTERVAL_DEFAULT
+        end
+
+        if wgt.options.Reserve ~= 0 then
+            wgt.vfltSamples = wgt.options.Reserve
+        else
+            wgt.vfltSamples = VFLT_SAMPLES_DEFAULT
+        end
         wgt.vReserve = 0
     end
 
@@ -244,9 +264,9 @@ end
 local function updateFilteredvPercent(wgt, vPercent)
     if vPercent > 0 and getTime() > wgt.vfltNextUpdate then
         wgt.vflt[wgt.vflti + 1] = vPercent
-        wgt.vflti = (wgt.vflti + 1) % wgt.options.vfltSamples
+        wgt.vflti = (wgt.vflti + 1) % wgt.vfltSamples
 
-        wgt.vfltNextUpdate = getTime() + wgt.options.vfltInterval
+        wgt.vfltNextUpdate = getTime() + wgt.vfltInterval
     end
 
     return getFilteredvPercent(wgt)
@@ -567,7 +587,14 @@ local function refreshZoneSmall(wgt)
     -- write text
     if wgt.useSensorP then
         -- power bar
-        local volts = string.format("%.1f v / %.2f v", wgt.vTotalLive, wgt.vCellLive);
+        local volts
+        if wgt.cell_detected then
+            -- cell count available
+            volts = string.format("%.1f v / %.2f v (%.0fs)", wgt.vTotalLive, wgt.vCellLive, wgt.cellCount);
+        else
+            -- cell count not available
+            volts = string.format("%.1f v / %.2f v (?s)", wgt.vTotalLive, wgt.vCellLive);
+        end
         lcd.drawText(myBatt.x + 8, myBatt.y + 4, volts, BOLD + LEFT  + wgt.text_color + wgt.no_telem_blink + wgt.low_batt_blink)
 
         if wgt.useSensorM then
