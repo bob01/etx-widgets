@@ -30,8 +30,8 @@ local app_name = "vThrottle"
 local AUDIO_PATH = "/SOUNDS/en/"
 
 local _options = {
-    { "EscPWM"            , SOURCE, 0 },
-    { "FlightMode"        , SOURCE, 0 },
+    { "ThrottleSensor"    , SOURCE, 0 },
+    { "FlightModeSensor"  , SOURCE, 0 },
     { "Status"            , BOOL, 1 },
     { "Voice"             , BOOL, 1 },
 }
@@ -108,9 +108,9 @@ local function background(wgt)
 
     -- configured?
     local fm
-    if wgt.options.FlightMode ~= 0 then
+    if wgt.options.FlightModeSensor ~= 0 then
         -- configured, try to fetch telemetry value - will be 0 (number) if not connected
-        fm = getValue(wgt.options.FlightMode)
+        fm = getValue(wgt.options.FlightModeSensor)
         wgt.isDataAvailable = type(fm) == "string"
     end
 
@@ -121,8 +121,8 @@ local function background(wgt)
         local armed = string.find(fm, "*") ~= nil
         if armed then
             -- armed, get ESC throttle if configured
-            if wgt.options.EscPWM ~= 0 then
-                local thro = getValue(wgt.options.EscPWM)
+            if wgt.options.ThrottleSensor ~= 0 then
+                local thro = getValue(wgt.options.ThrottleSensor)
                 wgt.throttle = string.format("%d%%", thro)
             else
                 wgt.throttle = "--"
