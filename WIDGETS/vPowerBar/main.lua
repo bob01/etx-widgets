@@ -54,12 +54,12 @@ local cellFull = 4.16
 local CELL_DETECTION_TIME = 10
 
 local _options = {
-    { "Sensor"            , SOURCE, 0 }, -- default to 'A1'
-    { "SensorP"           , SOURCE, 0 },
-    { "SensorM"           , SOURCE, 0 },
+    { "VoltSensor"            , SOURCE, 0 }, -- default to 'A1'
+    { "PcntSensor"            , SOURCE, 0 },
+    { "MahSensor"             , SOURCE, 0 },
     --{ "Show_Total_Voltage", BOOL  , 0      }, -- 0=Show as average Lipo cell level, 1=show the total voltage (voltage as is)
-    { "Samples"           , VALUE, 30, 0, 1000 },
-    { "Interval"          , VALUE, 10, 4, 500 },
+    { "Reserve"               , VALUE, 20, 0, 1000 },   -- reserve (or filter samples if calc percentage)
+    { "InitDelay"             , VALUE, 8, 4, 500 },     -- cell detection time (or interval if calc perceentage)
     --{ "Lithium_Ion"       , BOOL  , 0      }, -- 0=LIPO battery, 1=LI-ION (18650/21500)
 }
 
@@ -119,13 +119,13 @@ local function update(wgt, options)
     wgt.low_batt_blink = 0
 
     -- use default if user did not set, So widget is operational on "select widget"
-    if wgt.options.Sensor == 0 then
-        wgt.options.Sensor = defaultSensor
+    if wgt.options.VoltSensor == 0 then
+        wgt.options.VoltSensor = defaultSensor
     end
 
     wgt.options.source_name = ""
-    if (type(wgt.options.Sensor) == "number") then
-        local source_name = getSourceName(wgt.options.Sensor)
+    if (type(wgt.options.VoltSensor) == "number") then
+        local source_name = getSourceName(wgt.options.VoltSensor)
         if (source_name ~= nil) then
             if string.byte(string.sub(source_name, 1, 1)) > 127 then
                 source_name = string.sub(source_name, 2, -1) -- ???? why?
@@ -137,20 +137,25 @@ local function update(wgt, options)
             wgt.options.source_name = source_name
         end
     else
-        wgt.options.source_name = wgt.options.Sensor
+        wgt.options.source_name = wgt.options.VoltSensor
     end
 
-    wgt.useSensorP = wgt.options.SensorP ~= 0
-    wgt.useSensorM = wgt.options.SensorM ~= 0
+    wgt.useSensorP = wgt.options.PcntSensor ~= 0
+    wgt.useSensorM = wgt.options.MahSensor ~= 0
 
     if wgt.useSensorP then
-        wgt.cellDetectionTime = wgt.options.Interval
-        if wgt.options.Samples < 50 then
-            wgt.vReserve = wgt.options.Samples
+        -- using telemetry for battery %
+        wgt.cellDetectionTime = wgt.options.InitDelay
+        if wgt.options.Reserve < 50 then
+            wgt.vReserve = wgt.options.Reserve
         else
             wgt.vReserve = 0
         end
     else
+        -- estimating battery %
+        wgt.cellDetectionTime = CELL_DETECTION_TIME
+        wgt.vfltInterval = wgt.options.InitDelay
+        wgt.vfltSamples = wgt.options.Reserve
         wgt.vReserve = 0
     end
 
@@ -199,6 +204,8 @@ local function create(zone, options)
 
         vflt = {},
         vflti = 0,
+        vfltSamples = 0,
+        vfltInterval = 0, 
         vfltNextUpdate = 0,
 
         useSensorP = false,
@@ -237,9 +244,9 @@ end
 local function updateFilteredvPercent(wgt, vPercent)
     if vPercent > 0 and getTime() > wgt.vfltNextUpdate then
         wgt.vflt[wgt.vflti + 1] = vPercent
-        wgt.vflti = (wgt.vflti + 1) % wgt.options.Samples
+        wgt.vflti = (wgt.vflti + 1) % wgt.options.vfltSamples
 
-        wgt.vfltNextUpdate = getTime() + wgt.options.Interval
+        wgt.vfltNextUpdate = getTime() + wgt.options.vfltInterval
     end
 
     return getFilteredvPercent(wgt)
@@ -325,6 +332,7 @@ local function calcCellCount(wgt, singleVoltage)
     elseif singleVoltage < 43.0 then return 10
     elseif singleVoltage < 47.3 then return 11
     elseif singleVoltage < 51.6 then return 12
+    elseif singleVoltage < 60.2 then return 14
     end
 
     log("no match found" .. singleVoltage)
@@ -335,9 +343,9 @@ end
 --- This function returns a table with cels values
 local function calculateBatteryData(wgt)
 
-    local v = getValue(wgt.options.Sensor)
-    local fieldinfo = getFieldInfo(wgt.options.Sensor)
-    log("wgt.options.Sensor: " .. wgt.options.Sensor)
+    local v = getValue(wgt.options.VoltSensor)
+    local fieldinfo = getFieldInfo(wgt.options.VoltSensor)
+    log("wgt.options.VoltSensor: " .. wgt.options.VoltSensor)
 
     if type(v) == "table" then
         -- multi cell values using FLVSS liPo Voltage Sensor
@@ -403,7 +411,7 @@ local function calculateBatteryData(wgt)
     wgt.vCellLive = wgt.vTotalLive / wgt.cellCount
 
     if wgt.useSensorP then
-        local pcnt = getValue(wgt.options.SensorP)
+        local pcnt = getValue(wgt.options.PcntSensor)
         if pcnt < wgt.vReserve then
             wgt.vPercent = pcnt - wgt.vReserve
         else
@@ -415,7 +423,7 @@ local function calculateBatteryData(wgt)
     end
 
     if wgt.useSensorM then
-        wgt.vMah = getValue(wgt.options.SensorM)
+        wgt.vMah = getValue(wgt.options.MahSensor)
     end
 
     -- log("wgt.vCellLive: ".. wgt.vCellLive)
