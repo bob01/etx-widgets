@@ -23,7 +23,7 @@
 -- Designed for 1/8 cell
 -- Author: Robert Gayle (bob00@rogers.com)
 -- Date: 2024
--- ver: 0.2.0
+-- ver: 0.3.0
 
 local app_name = "vThrottle"
 
@@ -32,6 +32,7 @@ local AUDIO_PATH = "/SOUNDS/en/"
 local _options = {
     { "EscPWM"            , SOURCE, 0 },
     { "FlightMode"        , SOURCE, 0 },
+    { "Status"            , BOOL, 1 },
     { "Voice"             , BOOL, 1 },
 }
 
@@ -89,8 +90,10 @@ local function refreshZoneSmall(wgt)
 
     lcd.drawText(cell.x, cell.y, CHAR_TELEMETRY .. "Throttle", LEFT + wgt.text_color)
 
-    if(wgt.isDataAvailable) then
-        lcd.drawText(rx, cell.y, wgt.fmode, RIGHT + wgt.text_color)
+    if wgt.isDataAvailable then
+        if wgt.options.Status == 1 then
+            lcd.drawText(rx, cell.y, wgt.fmode, RIGHT + wgt.text_color)
+        end
     end
 
     local _,vh = lcd.sizeText(wgt.throttle, BOLD + MIDSIZE)
