@@ -23,7 +23,7 @@
 -- Designed for 1/8 cell
 -- Author: Rob Gayle (bob00@rogers.com)
 -- Date: 2024
--- ver: 0.4.0
+-- ver: 0.5.0
 
 local app_name = "vThrottle"
 
@@ -32,11 +32,22 @@ local AUDIO_PATH = "/SOUNDS/en/"
 local _options = {
     { "ThrottleSensor"    , SOURCE, 0 },
     { "FlightModeSensor"  , SOURCE, 0 },
+    { "EscStatus"         , SOURCE, 0 },
     { "Status"            , BOOL, 1 },
     { "Voice"             , BOOL, 1 },
 }
 
 local defaultSensor = "RxBt" -- RxBt / A1 / A3/ VFAS / Batt
+
+local LEVEL_INFO        = 1
+local LEVEL_WARN        = 2
+local LEVEL_ERROR       = 3
+
+local escStatusColors = {
+    [LEVEL_INFO]  = BLACK,
+    [LEVEL_WARN]  = BOLD + SHADOWED + YELLOW,
+    [LEVEL_ERROR] = BOLD + SHADOWED + RED,
+}
 
 --------------------------------------------------------------
 local function log(s)
@@ -59,11 +70,14 @@ local function create(zone, options)
 
         text_color = 0,
         cell_color = 0,
+        escstatus_color = 0,
 
         isDataAvailable = false,
 
         fmode = "",
         throttle = "",
+        escstatus_text = nil,
+        escstatus_level = LEVEL_INFO,
 
         armed = false,
     }
@@ -98,7 +112,45 @@ local function refreshZoneSmall(wgt)
 
     local _,vh = lcd.sizeText(wgt.throttle, BOLD + MIDSIZE)
     lcd.drawText(rx, cell.y + wgt.zone.h - vh, wgt.throttle, BOLD + RIGHT + MIDSIZE + wgt.text_color)
+
+    if wgt.escstatus_text then
+        _,vh = lcd.sizeText(wgt.escstatus_text, wgt.escstatus_color)
+        lcd.drawText(cell.x + 6, cell.y + wgt.zone.h - vh - 8, wgt.escstatus_text, LEFT + wgt.escstatus_color)
+    end
 end
+
+local STATE_MASK                = 0x0F      -- status bit mask
+local STATE_DISARMED            = 0x00      -- Motor stopped
+local STATE_POWER_CUT           = 0x01      -- Power cut maybe Overvoltage
+local STATE_FAST_START          = 0x02      -- "Bailout" State
+local STATE_STARTING            = 0x08      -- "Starting"
+local STATE_WINDMILLING         = 0x0C      -- still rotating no power drive can be named "Idle"
+local STATE_RUNNING_NORM        = 0x0E      -- normal "Running"
+
+local EVENT_MASK                = 0x70      -- event bit mask
+local WARN_DEVICE_MASK          = 0xC0      -- device ID bit mask (note WARN_SETPOINT_NOISE = 0xC0)
+local WARN_DEVICE_ESC           = 0x00      -- warning indicators are for ESC
+local WARN_DEVICE_BEC           = 0x80      -- warning indicators are for BEC
+local WARN_OK                   = 0x00      -- Overvoltage if Motor Status == STATE_POWER_CUT
+local WARN_UNDERVOLTAGE         = 0x10      -- Fail if Motor Status < STATE_STARTING
+local WARN_OVERTEMP             = 0x20      -- Fail if Motor Status == STATE_POWER_CUT
+local WARN_OVERAMP              = 0x40      -- Fail if Motor Status == STATE_POWER_CUT
+local WARN_SETPOINT_NOISE       = 0xC0      -- note this is special case (can never have OVERAMP w/ BEC hence reuse)
+
+local escState = {
+    [STATE_DISARMED]            = "OK",
+    [STATE_POWER_CUT]           = "Shutdown",
+    [STATE_FAST_START]          = "Bailout",
+    [STATE_STARTING]            = "Starting",
+    [STATE_WINDMILLING]         = "Idle",
+    [STATE_RUNNING_NORM]        = "Running",
+}
+
+local escEvent = {
+    [WARN_UNDERVOLTAGE]         = "Under Voltage",
+    [WARN_OVERTEMP]             = "Over Temp",
+    [WARN_OVERAMP]              = "Over Current",
+}
 
 -- This function allow recording of lowest cells when widget is in background
 local function background(wgt)
@@ -112,6 +164,8 @@ local function background(wgt)
         -- configured, try to fetch telemetry value - will be 0 (number) if not connected
         fm = getValue(wgt.options.FlightModeSensor)
         wgt.isDataAvailable = type(fm) == "string"
+-- wgt.isDataAvailable = true     -- <<== for testing only
+-- fm = "Normal *"
     end
 
     -- connected?
@@ -131,6 +185,56 @@ local function background(wgt)
         else
             -- not armed
             wgt.throttle = "Safe"
+        end
+
+        -- ESC statuc (YGE only ATM)
+        if wgt.options.EscStatus then
+            local scode = bit32.band(getValue(wgt.options.EscStatus), 0xFF)
+            local escstatus_text
+            local escstatus_level
+            local dev = bit32.band(scode, WARN_DEVICE_MASK)
+            if dev == WARN_SETPOINT_NOISE then
+                -- special case
+                escstatus_text = "ESC Setpoint Noise"
+                escstatus_level = LEVEL_ERROR
+            else
+                -- device part
+                if dev == WARN_DEVICE_BEC then
+                    escstatus_text = "BEC "
+                else
+                    escstatus_text = "ESC "
+                end
+
+                -- state text
+                local state = bit32.band(scode, STATE_MASK)
+                local stateText = escState[state] or string.format("Code x%02X", state)
+
+                -- event part
+                local event = bit32.band(scode, EVENT_MASK)
+                if event == WARN_OK then
+                    -- special case
+                    if state == STATE_POWER_CUT then
+                        escstatus_text = escstatus_text.."Over Voltage"
+                        escstatus_level = LEVEL_ERROR
+                    else
+                        escstatus_text = escstatus_text..stateText
+                        escstatus_level = LEVEL_INFO
+                    end
+                else
+                    -- event
+                    escstatus_text = escstatus_text..(escEvent[event] or "** unexpected **")
+                    if event == WARN_UNDERVOLTAGE then
+                        escstatus_level = state < STATE_STARTING and LEVEL_ERROR or LEVEL_WARN
+                    else
+                        escstatus_level = state == STATE_POWER_CUT and  LEVEL_ERROR or LEVEL_WARN
+                    end
+                end
+            end
+            if escstatus_level >= wgt.escstatus_level then
+                wgt.escstatus_text = (escstatus_level == LEVEL_ERROR) and string.upper(escstatus_text) or escstatus_text
+                wgt.escstatus_level = escstatus_level
+                wgt.escstatus_color = escStatusColors[escstatus_level]
+            end
         end
 
         -- keep value for display
@@ -171,10 +275,12 @@ local function refresh(wgt, event, touchState)
     else
         wgt.text_color = GREY
         wgt.cell_color = GREY
+        if wgt.escstatus_level == LEVEL_INFO then
+            wgt.escstatus_color = GREY
+        end
     end
 
     refreshZoneSmall(wgt)
-
 end
 
 return { name = app_name, options = _options, create = create, update = update, background = nil, refresh = refresh }
