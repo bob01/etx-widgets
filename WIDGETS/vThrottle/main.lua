@@ -23,7 +23,7 @@
 -- Designed for 1/8 cell
 -- Author: Rob Gayle (bob00@rogers.com)
 -- Date: 2024
--- ver: 0.5.0
+-- ver: 0.5.1
 
 local app_name = "vThrottle"
 
@@ -36,8 +36,6 @@ local _options = {
     { "Status"            , BOOL, 1 },
     { "Voice"             , BOOL, 1 },
 }
-
-local defaultSensor = "RxBt" -- RxBt / A1 / A3/ VFAS / Batt
 
 local LEVEL_INFO        = 1
 local LEVEL_WARN        = 2
@@ -61,6 +59,11 @@ local function update(wgt, options)
     end
 
     wgt.options = options
+
+    wgt.fmode = ""
+    wgt.throttle = ""
+    wgt.escstatus_text = nil
+    wgt.escstatus_level = LEVEL_INFO
 end
 
 local function create(zone, options)
@@ -188,7 +191,7 @@ local function background(wgt)
         end
 
         -- ESC statuc (YGE only ATM)
-        if wgt.options.EscStatus then
+        if wgt.options.EscStatus ~=0 then
             local scode = bit32.band(getValue(wgt.options.EscStatus), 0xFF)
             local escstatus_text
             local escstatus_level
