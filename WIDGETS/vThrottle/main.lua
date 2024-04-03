@@ -23,7 +23,7 @@
 -- Designed for 1/8 cell
 -- Author: Rob Gayle (bob00@rogers.com)
 -- Date: 2024
--- ver: 0.5.2
+-- ver: 0.5.4
 
 local app_name = "vThrottle"
 
@@ -48,10 +48,13 @@ local escStatusColors = {
 }
 
 --------------------------------------------------------------
+
 local function log(s)
     print("vThrottle: " .. s)
 end
+
 --------------------------------------------------------------
+-- YGE status
 
 local STATE_MASK                = 0x0F      -- status bit mask
 local STATE_DISARMED            = 0x00      -- Motor stopped
@@ -131,8 +134,11 @@ local function ygeGetStatus(code)
     return { text = text, level = level }
 end
 
+--------------------------------------------------------------
 
-local LOG_SIZE = 10
+
+local LIST_SIZE = 10
+local LOG_MAX = 128
 
 local log = {}
 local events = 0
@@ -173,8 +179,9 @@ local function create(zone, options)
     }
 
     -- imports
-    wgt.ToolsClass = loadScript("/WIDGETS/" .. app_name .. "/lib_widget_tools.lua", "tcd")
-    wgt.tools = wgt.ToolsClass(app_name)
+    wgt.libGUI = loadGUI()
+    wgt.gui = wgt.libGUI.newGUI()
+    wgt.vslider = nil
 
     update(wgt, options)
     return wgt
@@ -183,6 +190,26 @@ end
 -- audio support
 local function playAudio(f)
     playFile(AUDIO_PATH .. f .. ".wav")
+end
+
+-- get log event
+local function logGetEv(idx)
+    if idx <= events - LOG_MAX then
+        return nil
+    end
+    return log[((idx - 1) % LOG_MAX) + 1]
+end
+
+-- log status change
+local function logPutEv(wgt, scode)
+    if events > 0 and bit32.band(logGetEv(events), 0xFF) == bit32.band(scode, 0xFF) then
+        return
+    end
+
+    local t, _ = math.modf((getTime() - bootTime) / 100)
+    local ev = bit32.bor(bit32.lshift(t, 16), bit32.band(scode, 0xFF))
+    log[(events % LOG_MAX) + 1] = ev
+    events = events + 1
 end
 
 --- Zone size: 160x32 1/8th
@@ -211,26 +238,41 @@ end
 
 --- Zone size: 460x252 - app mode (full screen)
 local function refreshAppMode(wgt, event, touchState)
-    if (touchState and touchState.tapCount == 2) or (event and event == EVT_VIRTUAL_EXIT) then
+    if event and event == EVT_VIRTUAL_EXIT then
         lcd.exitFullScreen()
         return
     end
 
     local cell = { ["x"] = 0, ["y"] = 0, ["w"] = LCD_W, ["h"] = LCD_H }
+    local list_y = 40
+
+    local scroll = 1
+    if events > LIST_SIZE then
+        local max = #log - LIST_SIZE + 1
+        if not wgt.vslider then
+            -- create scrollbar
+            local mvy = 20
+            wgt.vslider = wgt.gui.verticalSlider(cell.w - 32, list_y + mvy, cell.h - list_y - 2 * mvy, max, 1, max, 1, nil)
+        else
+            -- update scrollbar max
+            scroll = wgt.vslider.max -  wgt.vslider.value + 1
+            wgt.vslider.max = max
+            wgt.vslider.value = wgt.vslider.max - scroll + 1
+        end
+    end
 
     local mx = 8
     local y = 12
     lcd.drawFilledRectangle(cell.x, cell.y, cell.w, 40, COLOR_THEME_SECONDARY1)
-    lcd.drawText(cell.x + mx, y, "Last ESC messages", COLOR_THEME_PRIMARY2 + BOLD)
+    lcd.drawText(cell.x + mx, y, string.format("%d ESC message%s", events, events == 1 and "" or "s"), COLOR_THEME_PRIMARY2 + BOLD)
 
     mx = mx + 4
-    y = 40
+    y = list_y
     lcd.drawRectangle(cell.x, y, cell.w, cell.h, BLACK, 1)
 
     y = y + 10
-    for i = #log, 1, -1 do
-        local wrap = (events > LOG_SIZE) and events or 0
-        local ev = log[((i + wrap - 1) % LOG_SIZE) + 1]
+    for i = 1, math.min(#log, LIST_SIZE) do
+        local ev = logGetEv(events - (i - 1) - (scroll - 1))
         local t = bit32.rshift(ev, 16)
         local time = string.format("%02d:%02d ", t / 60, t % 60)
         lcd.drawText(cell.x + mx, y, time, BLACK)
@@ -241,18 +283,10 @@ local function refreshAppMode(wgt, event, touchState)
         lcd.drawText(cell.x + mx + dx, y, status.text, bit32.bor(color, BOLD))
         y = y + dy
     end
-end
 
--- log status change
-local function logEscStatus(wgt, scode)
-    if events > 0 and bit32.band(log[((events - 1) % LOG_SIZE) + 1], 0xFF) == bit32.band(scode, 0xFF) then
-        return
+    if wgt.vslider then
+        wgt.gui.run(event, touchState)
     end
-
-    local t, _ = math.modf((getTime() - bootTime) / 100)
-    local ev = bit32.bor(bit32.lshift(t, 16), bit32.band(scode, 0xFF))
-    log[(events % LOG_SIZE) + 1] = ev
-    events = events + 1
 end
 
 -- This function allow recording of lowest cells when widget is in background
@@ -292,7 +326,7 @@ local function background(wgt)
         -- ESC statuc (YGE only ATM)
         if wgt.options.EscStatus ~=0 then
             local scode = getValue(wgt.options.EscStatus)
-            logEscStatus(wgt, scode)
+            logPutEv(wgt, scode)
             local status = wgt.escGetStatus(scode)
             if status.level >= wgt.escstatus_level then
                 wgt.escstatus_text = status.text
