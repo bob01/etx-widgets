@@ -23,7 +23,7 @@
 -- Designed for 1/8 cell
 -- Author: Rob Gayle (bob00@rogers.com)
 -- Date: 2024
--- ver: 0.5.1
+-- ver: 0.5.2
 
 local app_name = "vThrottle"
 
@@ -53,6 +53,91 @@ local function log(s)
 end
 --------------------------------------------------------------
 
+local STATE_MASK                = 0x0F      -- status bit mask
+local STATE_DISARMED            = 0x00      -- Motor stopped
+local STATE_POWER_CUT           = 0x01      -- Power cut maybe Overvoltage
+local STATE_FAST_START          = 0x02      -- "Bailout" State
+local STATE_STARTING            = 0x08      -- "Starting"
+local STATE_WINDMILLING         = 0x0C      -- still rotating no power drive can be named "Idle"
+local STATE_RUNNING_NORM        = 0x0E      -- normal "Running"
+
+local EVENT_MASK                = 0x70      -- event bit mask
+local WARN_DEVICE_MASK          = 0xC0      -- device ID bit mask (note WARN_SETPOINT_NOISE = 0xC0)
+local WARN_DEVICE_ESC           = 0x00      -- warning indicators are for ESC
+local WARN_DEVICE_BEC           = 0x80      -- warning indicators are for BEC
+local WARN_OK                   = 0x00      -- Overvoltage if Motor Status == STATE_POWER_CUT
+local WARN_UNDERVOLTAGE         = 0x10      -- Fail if Motor Status < STATE_STARTING
+local WARN_OVERTEMP             = 0x20      -- Fail if Motor Status == STATE_POWER_CUT
+local WARN_OVERAMP              = 0x40      -- Fail if Motor Status == STATE_POWER_CUT
+local WARN_SETPOINT_NOISE       = 0xC0      -- note this is special case (can never have OVERAMP w/ BEC hence reuse)
+
+local ygeState = {
+    [STATE_DISARMED]            = "OK",
+    [STATE_POWER_CUT]           = "Shutdown",
+    [STATE_FAST_START]          = "Bailout",
+    [STATE_STARTING]            = "Starting",
+    [STATE_WINDMILLING]         = "Idle",
+    [STATE_RUNNING_NORM]        = "Running",
+}
+
+local ygeEvent = {
+    [WARN_UNDERVOLTAGE]         = "Under Voltage",
+    [WARN_OVERTEMP]             = "Over Temp",
+    [WARN_OVERAMP]              = "Over Current",
+}
+
+local function ygeGetStatus(code)
+    local text, level
+    local scode = bit32.band(code, 0xFF)
+    local dev = bit32.band(scode, WARN_DEVICE_MASK)
+    if dev == WARN_SETPOINT_NOISE then
+        -- special case
+        text = "ESC Setpoint Noise"
+        level = LEVEL_ERROR
+    else
+        -- device part
+        if dev == WARN_DEVICE_BEC then
+            text = "BEC "
+        else
+            text = "ESC "
+        end
+
+        -- state text
+        local state = bit32.band(scode, STATE_MASK)
+        local stateText = ygeState[state] or string.format("Code x%02X", state)
+
+        -- event part
+        local event = bit32.band(scode, EVENT_MASK)
+        if event == WARN_OK then
+            -- special case
+            if state == STATE_POWER_CUT then
+                text = text.."Over Voltage"
+                level = LEVEL_ERROR
+            else
+                text = text..stateText
+                level = LEVEL_INFO
+            end
+        else
+            -- event
+            text = text..(ygeEvent[event] or "** unexpected **")
+            if event == WARN_UNDERVOLTAGE then
+                level = state < STATE_STARTING and LEVEL_ERROR or LEVEL_WARN
+            else
+                level = state == STATE_POWER_CUT and  LEVEL_ERROR or LEVEL_WARN
+            end
+        end
+    end
+    text = (level == LEVEL_ERROR) and string.upper(text) or text
+    return { text = text, level = level }
+end
+
+
+local LOG_SIZE = 10
+
+local log = {}
+local events = 0
+local bootTime = getTime()
+
 local function update(wgt, options)
     if (wgt == nil) then
         return
@@ -64,6 +149,7 @@ local function update(wgt, options)
     wgt.throttle = ""
     wgt.escstatus_text = nil
     wgt.escstatus_level = LEVEL_INFO
+    wgt.escGetStatus = ygeGetStatus
 end
 
 local function create(zone, options)
@@ -81,6 +167,7 @@ local function create(zone, options)
         throttle = "",
         escstatus_text = nil,
         escstatus_level = LEVEL_INFO,
+        escGetStatus = nil,
 
         armed = false,
     }
@@ -122,38 +209,51 @@ local function refreshZoneSmall(wgt)
     end
 end
 
-local STATE_MASK                = 0x0F      -- status bit mask
-local STATE_DISARMED            = 0x00      -- Motor stopped
-local STATE_POWER_CUT           = 0x01      -- Power cut maybe Overvoltage
-local STATE_FAST_START          = 0x02      -- "Bailout" State
-local STATE_STARTING            = 0x08      -- "Starting"
-local STATE_WINDMILLING         = 0x0C      -- still rotating no power drive can be named "Idle"
-local STATE_RUNNING_NORM        = 0x0E      -- normal "Running"
+--- Zone size: 460x252 - app mode (full screen)
+local function refreshAppMode(wgt, event, touchState)
+    if (touchState and touchState.tapCount == 2) or (event and event == EVT_VIRTUAL_EXIT) then
+        lcd.exitFullScreen()
+        return
+    end
 
-local EVENT_MASK                = 0x70      -- event bit mask
-local WARN_DEVICE_MASK          = 0xC0      -- device ID bit mask (note WARN_SETPOINT_NOISE = 0xC0)
-local WARN_DEVICE_ESC           = 0x00      -- warning indicators are for ESC
-local WARN_DEVICE_BEC           = 0x80      -- warning indicators are for BEC
-local WARN_OK                   = 0x00      -- Overvoltage if Motor Status == STATE_POWER_CUT
-local WARN_UNDERVOLTAGE         = 0x10      -- Fail if Motor Status < STATE_STARTING
-local WARN_OVERTEMP             = 0x20      -- Fail if Motor Status == STATE_POWER_CUT
-local WARN_OVERAMP              = 0x40      -- Fail if Motor Status == STATE_POWER_CUT
-local WARN_SETPOINT_NOISE       = 0xC0      -- note this is special case (can never have OVERAMP w/ BEC hence reuse)
+    local cell = { ["x"] = 0, ["y"] = 0, ["w"] = LCD_W, ["h"] = LCD_H }
 
-local escState = {
-    [STATE_DISARMED]            = "OK",
-    [STATE_POWER_CUT]           = "Shutdown",
-    [STATE_FAST_START]          = "Bailout",
-    [STATE_STARTING]            = "Starting",
-    [STATE_WINDMILLING]         = "Idle",
-    [STATE_RUNNING_NORM]        = "Running",
-}
+    local mx = 8
+    local y = 12
+    lcd.drawFilledRectangle(cell.x, cell.y, cell.w, 40, COLOR_THEME_SECONDARY1)
+    lcd.drawText(cell.x + mx, y, "Last ESC messages", COLOR_THEME_PRIMARY2 + BOLD)
 
-local escEvent = {
-    [WARN_UNDERVOLTAGE]         = "Under Voltage",
-    [WARN_OVERTEMP]             = "Over Temp",
-    [WARN_OVERAMP]              = "Over Current",
-}
+    mx = mx + 4
+    y = 40
+    lcd.drawRectangle(cell.x, y, cell.w, cell.h, BLACK, 1)
+
+    y = y + 10
+    for i = #log, 1, -1 do
+        local wrap = (events > LOG_SIZE) and events or 0
+        local ev = log[((i + wrap - 1) % LOG_SIZE) + 1]
+        local t = bit32.rshift(ev, 16)
+        local time = string.format("%02d:%02d ", t / 60, t % 60)
+        lcd.drawText(cell.x + mx, y, time, BLACK)
+        local dx,dy = lcd.sizeText(time, BLACK)
+
+        local status = wgt.escGetStatus(bit32.band(ev, 0x00FF))
+        local color = escStatusColors[status.level]
+        lcd.drawText(cell.x + mx + dx, y, status.text, bit32.bor(color, BOLD))
+        y = y + dy
+    end
+end
+
+-- log status change
+local function logEscStatus(wgt, scode)
+    if events > 0 and bit32.band(log[((events - 1) % LOG_SIZE) + 1], 0xFF) == bit32.band(scode, 0xFF) then
+        return
+    end
+
+    local t, _ = math.modf((getTime() - bootTime) / 100)
+    local ev = bit32.bor(bit32.lshift(t, 16), bit32.band(scode, 0xFF))
+    log[(events % LOG_SIZE) + 1] = ev
+    events = events + 1
+end
 
 -- This function allow recording of lowest cells when widget is in background
 local function background(wgt)
@@ -184,7 +284,6 @@ local function background(wgt)
             else
                 wgt.throttle = "--"
             end
-
         else
             -- not armed
             wgt.throttle = "Safe"
@@ -192,51 +291,13 @@ local function background(wgt)
 
         -- ESC statuc (YGE only ATM)
         if wgt.options.EscStatus ~=0 then
-            local scode = bit32.band(getValue(wgt.options.EscStatus), 0xFF)
-            local escstatus_text
-            local escstatus_level
-            local dev = bit32.band(scode, WARN_DEVICE_MASK)
-            if dev == WARN_SETPOINT_NOISE then
-                -- special case
-                escstatus_text = "ESC Setpoint Noise"
-                escstatus_level = LEVEL_ERROR
-            else
-                -- device part
-                if dev == WARN_DEVICE_BEC then
-                    escstatus_text = "BEC "
-                else
-                    escstatus_text = "ESC "
-                end
-
-                -- state text
-                local state = bit32.band(scode, STATE_MASK)
-                local stateText = escState[state] or string.format("Code x%02X", state)
-
-                -- event part
-                local event = bit32.band(scode, EVENT_MASK)
-                if event == WARN_OK then
-                    -- special case
-                    if state == STATE_POWER_CUT then
-                        escstatus_text = escstatus_text.."Over Voltage"
-                        escstatus_level = LEVEL_ERROR
-                    else
-                        escstatus_text = escstatus_text..stateText
-                        escstatus_level = LEVEL_INFO
-                    end
-                else
-                    -- event
-                    escstatus_text = escstatus_text..(escEvent[event] or "** unexpected **")
-                    if event == WARN_UNDERVOLTAGE then
-                        escstatus_level = state < STATE_STARTING and LEVEL_ERROR or LEVEL_WARN
-                    else
-                        escstatus_level = state == STATE_POWER_CUT and  LEVEL_ERROR or LEVEL_WARN
-                    end
-                end
-            end
-            if escstatus_level >= wgt.escstatus_level then
-                wgt.escstatus_text = (escstatus_level == LEVEL_ERROR) and string.upper(escstatus_text) or escstatus_text
-                wgt.escstatus_level = escstatus_level
-                wgt.escstatus_color = escStatusColors[escstatus_level]
+            local scode = getValue(wgt.options.EscStatus)
+            logEscStatus(wgt, scode)
+            local status = wgt.escGetStatus(scode)
+            if status.level >= wgt.escstatus_level then
+                wgt.escstatus_text = status.text
+                wgt.escstatus_level = status.level
+                wgt.escstatus_color = escStatusColors[status.level]
             end
         end
 
@@ -252,7 +313,6 @@ local function background(wgt)
             end
             wgt.armed = armed
         end
-
     else
         -- not connected
         wgt.throttle = "**"
@@ -283,7 +343,12 @@ local function refresh(wgt, event, touchState)
         end
     end
 
-    refreshZoneSmall(wgt)
+
+    if (event ~= nil) then
+        refreshAppMode(wgt, event, touchState)
+    else
+        refreshZoneSmall(wgt)
+    end
 end
 
-return { name = app_name, options = _options, create = create, update = update, background = nil, refresh = refresh }
+return { name = app_name, options = _options, create = create, update = update, background = background, refresh = refresh }
