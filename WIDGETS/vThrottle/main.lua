@@ -319,8 +319,8 @@ local function background(wgt)
         -- configured, try to fetch telemetry value - will be 0 (number) if not connected
         fm = getValue(wgt.options.FlightModeSensor)
         wgt.isDataAvailable = type(fm) == "string"
-wgt.isDataAvailable = true     -- <<== for testing only
-fm = "Normal *"
+-- wgt.isDataAvailable = true     -- <<== for testing only
+-- fm = "Normal *"
     end
 
     -- connected?
