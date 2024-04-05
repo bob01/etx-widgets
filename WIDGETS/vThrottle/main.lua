@@ -23,7 +23,7 @@
 -- Designed for 1/8 cell
 -- Author: Rob Gayle (bob00@rogers.com)
 -- Date: 2024
--- ver: 0.5.4
+-- ver: 0.5.5
 
 local app_name = "vThrottle"
 
@@ -142,6 +142,7 @@ local LOG_MAX = 128
 
 local log = {}
 local events = 0
+local bootEpoch = getDateTime()
 local bootTime = getTime()
 
 local function update(wgt, options)
@@ -176,6 +177,8 @@ local function create(zone, options)
         escGetStatus = nil,
 
         armed = false,
+
+        epoch = (bootEpoch.hour * 3600 + bootEpoch.min * 60 + bootEpoch.sec) * 10
     }
 
     -- imports
@@ -206,10 +209,25 @@ local function logPutEv(wgt, scode)
         return
     end
 
-    local t, _ = math.modf((getTime() - bootTime) / 100)
+    local t, _ = math.modf((getTime() - bootTime) / 10)
     local ev = bit32.bor(bit32.lshift(t, 16), bit32.band(scode, 0xFF))
     log[(events % LOG_MAX) + 1] = ev
     events = events + 1
+end
+
+-- format log time
+local function getEvTime(wgt, evt)
+    local t = wgt.epoch + evt
+    local dsec = t % 10
+    t = math.floor(t / 10)
+
+    local sec = t % 60
+    t = math.floor(t / 60)
+ 
+    local min = t % 60
+    t = math.floor(t / 60)
+
+    return { hour = t, min = min, sec = sec, dsec = dsec }
 end
 
 --- Zone size: 160x32 1/8th
@@ -273,8 +291,8 @@ local function refreshAppMode(wgt, event, touchState)
     y = y + 10
     for i = 1, math.min(#log, LIST_SIZE) do
         local ev = logGetEv(events - (i - 1) - (scroll - 1))
-        local t = bit32.rshift(ev, 16)
-        local time = string.format("%02d:%02d ", t / 60, t % 60)
+        local evt = getEvTime(wgt, bit32.rshift(ev, 16))
+        local time = string.format("%02d:%02d:%02d.%01d ", evt.hour, evt.min, evt.sec, evt.dsec)
         lcd.drawText(cell.x + mx, y, time, BLACK)
         local dx,dy = lcd.sizeText(time, BLACK)
 
@@ -301,8 +319,8 @@ local function background(wgt)
         -- configured, try to fetch telemetry value - will be 0 (number) if not connected
         fm = getValue(wgt.options.FlightModeSensor)
         wgt.isDataAvailable = type(fm) == "string"
--- wgt.isDataAvailable = true     -- <<== for testing only
--- fm = "Normal *"
+wgt.isDataAvailable = true     -- <<== for testing only
+fm = "Normal *"
     end
 
     -- connected?
