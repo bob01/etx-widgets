@@ -23,7 +23,7 @@
 -- Designed for 1/8 cell
 -- Author: Rob Gayle (bob00@rogers.com)
 -- Date: 2024
--- ver: 0.5.5
+-- ver: 0.5.6
 
 local app_name = "vThrottle"
 
@@ -37,11 +37,13 @@ local _options = {
     { "Voice"             , BOOL, 1 },
 }
 
+local LEVEL_TRACE       = 0
 local LEVEL_INFO        = 1
 local LEVEL_WARN        = 2
 local LEVEL_ERROR       = 3
 
 local escStatusColors = {
+    [LEVEL_TRACE] = GREY,
     [LEVEL_INFO]  = BLACK,
     [LEVEL_WARN]  = BOLD + SHADOWED + YELLOW,
     [LEVEL_ERROR] = BOLD + SHADOWED + RED,
@@ -52,6 +54,18 @@ local escStatusColors = {
 local function log(s)
     print("vThrottle: " .. s)
 end
+
+--------------------------------------------------------------
+
+local LIST_SIZE = 10
+local LOG_MAX = 128
+local YGE_SPN_IGNORE_MAX = 32
+
+local log = {}
+local events = 0
+local ygeSpnEvents = 0
+local bootEpoch = getDateTime()
+local bootTime = getTime()
 
 --------------------------------------------------------------
 -- YGE status
@@ -86,17 +100,23 @@ local ygeState = {
 local ygeEvent = {
     [WARN_UNDERVOLTAGE]         = "Under Voltage",
     [WARN_OVERTEMP]             = "Over Temp",
-    [WARN_OVERAMP]              = "Over Current",
+    [WARN_OVERAMP]              = "Current Limit",
 }
 
-local function ygeGetStatus(code)
+local function ygeGetStatus(code, changed)
     local text, level
     local scode = bit32.band(code, 0xFF)
     local dev = bit32.band(scode, WARN_DEVICE_MASK)
+    local state = bit32.band(scode, STATE_MASK)
     if dev == WARN_SETPOINT_NOISE then
         -- special case
         text = "ESC Setpoint Noise"
-        level = LEVEL_ERROR
+        if changed then
+            ygeSpnEvents = ygeSpnEvents + 1
+        end
+        level = (state == STATE_POWER_CUT and LEVEL_ERROR) or 
+                (ygeSpnEvents < YGE_SPN_IGNORE_MAX and LEVEL_TRACE) or 
+                LEVEL_WARN
     else
         -- device part
         if dev == WARN_DEVICE_BEC then
@@ -106,7 +126,6 @@ local function ygeGetStatus(code)
         end
 
         -- state text
-        local state = bit32.band(scode, STATE_MASK)
         local stateText = ygeState[state] or string.format("Code x%02X", state)
 
         -- event part
@@ -126,7 +145,7 @@ local function ygeGetStatus(code)
             if event == WARN_UNDERVOLTAGE then
                 level = state < STATE_STARTING and LEVEL_ERROR or LEVEL_WARN
             else
-                level = state == STATE_POWER_CUT and  LEVEL_ERROR or LEVEL_WARN
+                level = state == STATE_POWER_CUT and LEVEL_ERROR or LEVEL_WARN
             end
         end
     end
@@ -136,14 +155,6 @@ end
 
 --------------------------------------------------------------
 
-
-local LIST_SIZE = 10
-local LOG_MAX = 128
-
-local log = {}
-local events = 0
-local bootEpoch = getDateTime()
-local bootTime = getTime()
 
 local function update(wgt, options)
     if (wgt == nil) then
@@ -203,16 +214,17 @@ local function logGetEv(idx)
     return log[((idx - 1) % LOG_MAX) + 1]
 end
 
--- log status change
+-- log status change, return true if new event logged
 local function logPutEv(wgt, scode)
     if events > 0 and bit32.band(logGetEv(events), 0xFF) == bit32.band(scode, 0xFF) then
-        return
+        return false
     end
 
     local t, _ = math.modf((getTime() - bootTime) / 10)
     local ev = bit32.bor(bit32.lshift(t, 16), bit32.band(scode, 0xFF))
     log[(events % LOG_MAX) + 1] = ev
     events = events + 1
+    return true
 end
 
 -- format log time
@@ -296,7 +308,7 @@ local function refreshAppMode(wgt, event, touchState)
         lcd.drawText(cell.x + mx, y, time, BLACK)
         local dx,dy = lcd.sizeText(time, BLACK)
 
-        local status = wgt.escGetStatus(bit32.band(ev, 0x00FF))
+        local status = wgt.escGetStatus(bit32.band(ev, 0x00FF), false)
         local color = escStatusColors[status.level]
         lcd.drawText(cell.x + mx + dx, y, status.text, bit32.bor(color, BOLD))
         y = y + dy
@@ -344,8 +356,8 @@ local function background(wgt)
         -- ESC statuc (YGE only ATM)
         if wgt.options.EscStatus ~=0 then
             local scode = getValue(wgt.options.EscStatus)
-            logPutEv(wgt, scode)
-            local status = wgt.escGetStatus(scode)
+            local changed = logPutEv(wgt, scode)
+            local status = wgt.escGetStatus(scode, changed)
             if status.level >= wgt.escstatus_level then
                 wgt.escstatus_text = status.text
                 wgt.escstatus_level = status.level
