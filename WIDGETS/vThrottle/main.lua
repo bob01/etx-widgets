@@ -23,7 +23,7 @@
 -- Designed for 1/8 cell
 -- Author: Rob Gayle (bob00@rogers.com)
 -- Date: 2024
--- ver: 0.5.6
+-- ver: 0.5.8
 
 local app_name = "vThrottle"
 
@@ -60,6 +60,9 @@ end
 local LIST_SIZE = 10
 local LOG_MAX = 128
 local YGE_SPN_IGNORE_MAX = 32
+
+local escstatus_text = nil
+local escstatus_level = LEVEL_INFO
 
 local log = {}
 local events = 0
@@ -153,6 +156,15 @@ local function ygeGetStatus(code, changed)
     return { text = text, level = level }
 end
 
+local function ygeResetStatus()
+    escstatus_text = nil
+    escstatus_level = LEVEL_INFO
+
+    log = {}
+    events = 0
+    ygeSpnEvents = 0
+end
+
 --------------------------------------------------------------
 
 
@@ -165,9 +177,8 @@ local function update(wgt, options)
 
     wgt.fmode = ""
     wgt.throttle = ""
-    wgt.escstatus_text = nil
-    wgt.escstatus_level = LEVEL_INFO
     wgt.escGetStatus = ygeGetStatus
+    wgt.escResetStatus = ygeResetStatus
 end
 
 local function create(zone, options)
@@ -183,10 +194,9 @@ local function create(zone, options)
 
         fmode = "",
         throttle = "",
-        escstatus_text = nil,
-        escstatus_level = LEVEL_INFO,
         escGetStatus = nil,
 
+        connected = false,
         armed = false,
 
         epoch = (bootEpoch.hour * 3600 + bootEpoch.min * 60 + bootEpoch.sec) * 10
@@ -260,9 +270,9 @@ local function refreshZoneSmall(wgt)
     local _,vh = lcd.sizeText(wgt.throttle, BOLD + MIDSIZE)
     lcd.drawText(rx, cell.y + wgt.zone.h - vh, wgt.throttle, BOLD + RIGHT + MIDSIZE + wgt.text_color)
 
-    if wgt.escstatus_text then
-        _,vh = lcd.sizeText(wgt.escstatus_text, wgt.escstatus_color)
-        lcd.drawText(cell.x + 6, cell.y + wgt.zone.h - vh - 8, wgt.escstatus_text, LEFT + wgt.escstatus_color)
+    if escstatus_text then
+        _,vh = lcd.sizeText(escstatus_text, wgt.escstatus_color)
+        lcd.drawText(cell.x + 6, cell.y + wgt.zone.h - vh - 8, escstatus_text, LEFT + wgt.escstatus_color)
     end
 end
 
@@ -331,13 +341,19 @@ local function background(wgt)
         -- configured, try to fetch telemetry value - will be 0 (number) if not connected
         fm = getValue(wgt.options.FlightModeSensor)
         wgt.isDataAvailable = type(fm) == "string"
--- wgt.isDataAvailable = true     -- <<== for testing only
+-- wgt.isDataAvailable = getValue(wgt.options.ThrottleSensor) == 40     -- <<== for testing only
 -- fm = "Normal *"
     end
 
     -- connected?
     if wgt.isDataAvailable then
         -- connected
+        if not wgt.connected then
+            -- reset status / log
+            wgt.escResetStatus()
+            wgt.connected = true
+        end
+
         -- armed?
         local armed = string.find(fm, "*") ~= nil
         if armed then
@@ -358,9 +374,9 @@ local function background(wgt)
             local scode = getValue(wgt.options.EscStatus)
             local changed = logPutEv(wgt, scode)
             local status = wgt.escGetStatus(scode, changed)
-            if status.level >= wgt.escstatus_level then
-                wgt.escstatus_text = status.text
-                wgt.escstatus_level = status.level
+            if status.level >= escstatus_level then
+                escstatus_text = status.text
+                escstatus_level = status.level
                 wgt.escstatus_color = escStatusColors[status.level]
             end
         end
@@ -381,6 +397,7 @@ local function background(wgt)
         -- not connected
         wgt.throttle = "**"
         wgt.fmode = ""
+        wgt.connected = false
 
         -- reset last armed
         wgt.armed = false
@@ -402,7 +419,7 @@ local function refresh(wgt, event, touchState)
     else
         wgt.text_color = GREY
         wgt.cell_color = GREY
-        if wgt.escstatus_level == LEVEL_INFO then
+        if escstatus_level == LEVEL_INFO then
             wgt.escstatus_color = GREY
         end
     end
