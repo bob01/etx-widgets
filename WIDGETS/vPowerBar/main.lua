@@ -39,17 +39,17 @@
 
 -- Voice alerts added, kill the blink, brighter battery colors + line
 -- Added consumption "power bar"
--- friendlier UI, new name (vPowerBar), specify cell count option
+-- friendlier UI, new name (vPowerBar), specify cell count option, reserve, haptic critical
 -- Author: Rob Gayle (bob00@rogers.com)
 -- Date: 2024
--- ver: 0.7.0
+-- ver: 0.7.2
 
 local app_name = "vPowerBar"
 
 local AUDIO_PATH = "/SOUNDS/en/"
 
-local battLow = 30
 local battCritical = 20
+local battLowMargin = 10
 
 local cellFull = 4.16
 
@@ -160,8 +160,10 @@ local function update(wgt, options)
         -- using telemetry for battery %
         if wgt.options.Reserve < 50 then
             wgt.vReserve = wgt.options.Reserve
+            battCritical = wgt.vReserve > 0 and wgt.vReserve or 20
         else
             wgt.vReserve = 0
+            battCritical = 20
         end
     else
         -- estimating battery %
@@ -480,11 +482,12 @@ end
 
 -- color for battery
 -- This function returns green at 100%, red bellow 30% and graduate in between
-local function getPercentColor(percent)
-    if percent < battCritical then
+local function getPercentColor(wgt)
+    local critical = wgt.vReserve == 0 and battCritical or 0
+    if wgt.vPercent <= critical then
         -- red
         return lcd.RGB(0xff, 0, 0)
-    elseif percent < battLow then
+    elseif wgt.vPercent <= critical + 20 then
         -- yellow
         return lcd.RGB(0xff, 0xff, 0)
     else
@@ -534,7 +537,7 @@ end
 
 local function drawBattery(wgt, myBatt)
     -- fill batt
-    local fill_color = getPercentColor(wgt.vPercent)
+    local fill_color = getPercentColor(wgt)
     local pcntY = math.floor(wgt.vPercent / 100 * (myBatt.h - myBatt.cath_h))
     local rectY = wgt.zone.y + myBatt.y + myBatt.h - pcntY
     lcd.drawFilledRectangle(wgt.zone.x + myBatt.x, rectY, myBatt.w, pcntY, fill_color)
@@ -576,7 +579,7 @@ local function refreshZoneSmall(wgt)
     local myBatt = { ["x"] = 4, ["y"] = 4, ["w"] = wgt.zone.w - 8, ["h"] = wgt.zone.h - 8, ["segments_w"] = 25, ["color"] = WHITE, ["cath_w"] = 6, ["cath_h"] = 20 }
 
     -- fill battery
-    local fill_color = getPercentColor(wgt.vPercent)
+    local fill_color = getPercentColor(wgt)
     lcd.drawGauge(myBatt.x, myBatt.y, myBatt.w, myBatt.h, wgt.vPercent, 100, fill_color)
 
     -- draw battery
@@ -731,12 +734,14 @@ local function background(wgt)
         if (wgt.battPercentPlayed ~= battva or battva <= 0) and getTime() > wgt.battNextPlay then
 
             -- urgent?
-            if battva > battLow then
+            local critical = wgt.vReserve == 0 and battCritical or 0
+            if battva > critical + battLowMargin then
                 playAudio("battry")
-            elseif battva > battCritical then
+            elseif battva > critical then
                 playAudio("batlow")
             else
                 playAudio("batcrt")
+                playHaptic(100, 0, PLAY_NOW)
             end
 
             -- play % if >= 0
