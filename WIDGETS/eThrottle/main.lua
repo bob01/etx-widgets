@@ -23,9 +23,9 @@
 -- Designed for 1/8 cell
 -- Author: Rob Gayle (bob00@rogers.com)
 -- Date: 2024
--- ver: 0.5.8
+-- ver: 0.5.9
 
-local app_name = "vThrottle"
+local app_name = "eThrottle"
 
 local AUDIO_PATH = "/SOUNDS/en/"
 

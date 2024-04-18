@@ -42,9 +42,9 @@
 -- friendlier UI, new name (vPowerBar), specify cell count option, reserve, haptic critical
 -- Author: Rob Gayle (bob00@rogers.com)
 -- Date: 2024
--- ver: 0.7.2
+-- ver: 0.7.3
 
-local app_name = "vPowerBar"
+local app_name = "ePowerbar"
 
 local AUDIO_PATH = "/SOUNDS/en/"
 
@@ -61,10 +61,8 @@ local _options = {
     { "VoltSensor"            , SOURCE, 0 }, -- default to 'A1'
     { "PcntSensor"            , SOURCE, 0 },
     { "MahSensor"             , SOURCE, 0 },
-    --{ "Show_Total_Voltage", BOOL  , 0      }, -- 0=Show as average Lipo cell level, 1=show the total voltage (voltage as is)
     { "Reserve"               , VALUE, 20, 0, 1000 },   -- reserve (or filter samples if calc percentage)
     { "Cells"                 , VALUE, 0, 0, 14 },      -- cell detection time (or interval if calc perceentage)
-    --{ "Lithium_Ion"       , BOOL  , 0      }, -- 0=LIPO battery, 1=LI-ION (18650/21500)
 }
 
 -- Data gathered from commercial lipo sensors
