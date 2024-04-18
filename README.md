@@ -10,7 +10,7 @@ These widgets have been designed by R/C Heli pilots for R/C Heli pilots.
 The goal is to present the relevant telemetry expected from modern R/C systems before, during and after flight with on-screen, audio and haptic elements.
 
 
-# etxPowerbar
+# ePowerbar
 ![image](https://github.com/bob01/etxwidgets/assets/4014433/31942e6a-a4ba-4ae8-943b-a3cb83a7d4ab)
 ![image](https://github.com/bob01/etxwidgets/assets/4014433/aed6ee88-e325-405c-bf60-df8a25913d84)
 ![image](https://github.com/bob01/etxwidgets/assets/4014433/085ecfe2-60d3-499f-bcd6-84455cb73eca)
@@ -32,10 +32,10 @@ Flashing will continue to indicate that flight started with a partially charged 
 - Reserve:       percentage reseerve, usually 20 - 30%. Pilot can then simply fly to 0% on the powerbar 
 - Cells:         cell count. 0 for auto detect - displayed count flashes '?' during cell detection, it is important to wait for the result before moving on as a depleted pack may be identified as a full pack with 1 cell less. e.g. dead 12S identified as full 10 or 11S. Reccommend just setting this explicitly to remove all uncertainty.
 
-etxPowerbar was based on the the excellent 'BattAnalog' widget by Offer Shmuely
+ePowerbar was based on the the excellent 'BattAnalog' widget by Offer Shmuely
 
 
-# etxThrottle
+# eThrottle
 ![image](https://github.com/bob01/etxwidgets/assets/4014433/fb6135be-484a-4159-aaa3-a8dc52de5a39)
 ![image](https://github.com/bob01/etxwidgets/assets/4014433/d935f4f2-1cbb-4d3b-8c24-8a240bb498ed)
 ![image](https://github.com/bob01/etxwidgets/assets/4014433/a94fffd5-9e0a-4e15-a427-3ec466ef6cd0)
