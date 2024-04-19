@@ -54,3 +54,10 @@ Currently only YGE decoded/supported, more coming soon.
 - EscStatus:           esc status telemetry sensor - leave unset "---" if not supported by ESC or flight controller version
 - Status:              enable / disable flight controller status in the widget's upper right above the throttle % / Safe 
 - Voice:               enable / disable voice
+
+
+# Installation
+- download and unzip etx-widgets-main.zip
+- connect the radio and copy these folders from the zip file to the radio
+![image](https://github.com/bob01/etx-widgets/assets/4014433/876cdaa9-a6a7-46b9-8e36-bde02218bb6b)
+![image](https://github.com/bob01/etx-widgets/assets/4014433/56171f48-e973-4ed5-9220-a4d11e5756e8)
