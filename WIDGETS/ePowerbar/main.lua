@@ -769,8 +769,8 @@ local function refresh(wgt, event, touchState)
         wgt.cell_color = BLACK
     else
         -- wgt.no_telem_blink = INVERS + BLINK
-        wgt.text_color = GREY
-        wgt.cell_color = GREY
+        wgt.text_color = COLOR_THEME_DISABLED
+        wgt.cell_color = COLOR_THEME_DISABLED
     end
 
     if (event ~= nil) then

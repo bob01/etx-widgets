@@ -187,7 +187,6 @@ local function create(zone, options)
         options = options,
 
         text_color = 0,
-        cell_color = 0,
         escstatus_color = 0,
 
         isDataAvailable = false,
@@ -415,12 +414,10 @@ local function refresh(wgt, event, touchState)
 
     if wgt.isDataAvailable then
         wgt.text_color = BLACK
-        wgt.cell_color = BLACK
     else
-        wgt.text_color = GREY
-        wgt.cell_color = GREY
+        wgt.text_color = COLOR_THEME_DISABLED
         if escstatus_level == LEVEL_INFO then
-            wgt.escstatus_color = GREY
+            wgt.escstatus_color = COLOR_THEME_DISABLED
         end
     end
 
