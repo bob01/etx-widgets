@@ -1,9 +1,6 @@
 --[[
 #########################################################################
 #                                                                       #
-# Telemetry Widget script for FrSky Horus/RadioMaster TX16s             #
-# Copyright "Offer Shmuely"                                             #
-#                                                                       #
 # License GPLv2: http://www.gnu.org/licenses/gpl-2.0.html               #
 #                                                                       #
 # This program is free software; you can redistribute it and/or modify  #
@@ -36,7 +33,7 @@ local _options = {
 
 --------------------------------------------------------------
 
-local LS_BEC_MONITOR_INDEX          = 11
+local LS_BEC_MONITOR_INDEX      = 11
 
 local TELE_ADC_SENSOR_INDEX     = 12
 local TELE_ESC_SENSOR_INDEX     = 19

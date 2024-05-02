@@ -1,9 +1,6 @@
 --[[
 #########################################################################
 #                                                                       #
-# Telemetry Widget script for FrSky Horus/RadioMaster TX16s             #
-# Copyright "Offer Shmuely"                                             #
-#                                                                       #
 # License GPLv2: http://www.gnu.org/licenses/gpl-2.0.html               #
 #                                                                       #
 # This program is free software; you can redistribute it and/or modify  #
@@ -368,7 +365,7 @@ local function background(wgt)
             wgt.throttle = "Safe"
         end
 
-        -- ESC statuc (YGE only ATM)
+        -- ESC status (YGE only ATM)
         if wgt.options.EscStatus ~=0 then
             local scode = getValue(wgt.options.EscStatus)
             local changed = logPutEv(wgt, scode)
