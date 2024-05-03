@@ -20,7 +20,7 @@
 -- Designed for 1/8 cell
 -- Author: Rob Gayle (bob00@rogers.com)
 -- Date: 2024
--- ver: 0.5.9
+-- ver: 0.6.2
 
 local app_name = "eThrottle"
 
@@ -38,6 +38,10 @@ local LEVEL_TRACE       = 0
 local LEVEL_INFO        = 1
 local LEVEL_WARN        = 2
 local LEVEL_ERROR       = 3
+
+local PARAM_STATUS_NEED_RESET       = 0x0FFF
+local PARAM_OOB_FLAG                = 0x0F00
+local PARAM_OOB_MASK                = 0x00FF
 
 local escStatusColors = {
     [LEVEL_TRACE] = GREY,
@@ -60,6 +64,8 @@ local YGE_SPN_IGNORE_MAX = 32
 
 local escstatus_text = nil
 local escstatus_level = LEVEL_INFO
+local escGetStatus = nil
+local escResetStatus = nil
 
 local log = {}
 local events = 0
@@ -69,6 +75,8 @@ local bootTime = getTime()
 
 --------------------------------------------------------------
 -- YGE status
+
+local YGE_SIG                   = 0xA5      -- ESC signature
 
 local STATE_MASK                = 0x0F      -- status bit mask
 local STATE_DISARMED            = 0x00      -- Motor stopped
@@ -108,7 +116,10 @@ local function ygeGetStatus(code, changed)
     local scode = bit32.band(code, 0xFF)
     local dev = bit32.band(scode, WARN_DEVICE_MASK)
     local state = bit32.band(scode, STATE_MASK)
-    if dev == WARN_SETPOINT_NOISE then
+    if scode == 0 then
+        text = "YGE ESC OK"
+        level = LEVEL_INFO
+    elseif dev == WARN_SETPOINT_NOISE then
         -- special case
         text = "ESC Setpoint Noise"
         if changed then
@@ -163,6 +174,120 @@ local function ygeResetStatus()
 end
 
 --------------------------------------------------------------
+-- Scorpion status
+
+
+-- * Scorpion Telemetry
+-- *    - Serial protocol is 38400,8N1
+-- *    - Frame rate running:10Hz idle:1Hz
+-- *    - Little-Endian fields
+-- *    - CRC16-CCITT
+-- *    - Error Code bits:
+-- *         0:  N/A
+-- *         1:  BEC voltage error
+-- *         2:  Temperature error
+-- *         3:  Consumption error
+-- *         4:  Input voltage error
+-- *         5:  Current error
+-- *         6:  N/A
+-- *         7:  Throttle error
+
+local TRIB_SIG                  = 0x53      -- ESC signature
+
+ local function tribGetStatus(code, changed)
+    local text = "Scorpion ESC OK"
+    local level = LEVEL_INFO
+    -- just report highest order bit
+    for bit = 0, 7 do
+        if bit32.band(code, bit32.lshift(1, bit)) ~= 0 then
+            local fault = nil
+            if bit == 1 then
+                fault = "BEC Voltage"
+            elseif bit == 2 then
+                fault = "ESC Temperature"
+            elseif bit == 3 then
+                fault = "ESC Consumption"
+            elseif bit == 4 then
+                fault = "ESC Voltage"
+            elseif bit == 5 then
+                fault = "ESC Current"
+            -- elseif bit == 7 then
+            --     fault = "ESC Throttle Error"
+            end
+            if fault then
+                text = fault
+                level = LEVEL_ERROR
+            end
+        end
+    end
+    return { text = text, level = level }
+end
+
+local function tribResetStatus()
+    escstatus_text = nil
+    escstatus_level = LEVEL_INFO
+
+    log = {}
+    events = 0
+end
+
+--------------------------------------------------------------
+-- HW5 status
+
+-- *    - Fault code bits:
+-- *         0:  Motor locked protection
+-- *         1:  Over-temp protection
+-- *         2:  Input throttle error at startup
+-- *         3:  Throttle signal lost
+-- *         4:  Over-current error
+-- *         5:  Low-voltage error
+-- *         6:  Input-voltage error
+-- *         7:  Motor connection error
+
+local PL5_SIG                   = 0xFD      -- ESC signature
+
+local function pl5GetStatus(code, changed)
+   local text = "HobbyWing ESC OK"
+   local level = LEVEL_INFO
+   -- just report highest order bit
+   for bit = 0, 7 do
+       if bit32.band(code, bit32.lshift(1, bit)) ~= 0 then
+           local fault = nil
+           if bit == 0 then
+               fault = "ESC Motor Locked"
+            elseif bit == 1 then
+                fault = "ESC Over Temp"
+            elseif bit == 2 then
+                fault = "ESC Throttle Error"
+            elseif bit == 3 then
+                fault = "ESC Throttle Signal"
+            elseif bit == 4 then
+                fault = "ESC Over Current"
+            elseif bit == 5 then
+                fault = "ESC Low Voltage"
+            elseif bit == 6 then
+                fault = "ESC Input Voltage"
+            elseif bit == 7 then
+                fault = "ESC Motor Connection"
+            end
+            if fault then
+                text = fault
+                level = LEVEL_ERROR
+            end
+       end
+   end
+   return { text = text, level = level }
+end
+
+local function pl5ResetStatus()
+   escstatus_text = nil
+   escstatus_level = LEVEL_INFO
+
+   log = {}
+   events = 0
+end
+
+--------------------------------------------------------------
 
 
 local function update(wgt, options)
@@ -174,8 +299,6 @@ local function update(wgt, options)
 
     wgt.fmode = ""
     wgt.throttle = ""
-    wgt.escGetStatus = ygeGetStatus
-    wgt.escResetStatus = ygeResetStatus
 end
 
 local function create(zone, options)
@@ -183,6 +306,7 @@ local function create(zone, options)
         zone = zone,
         options = options,
 
+        scode = 0,
         text_color = 0,
         escstatus_color = 0,
 
@@ -190,7 +314,6 @@ local function create(zone, options)
 
         fmode = "",
         throttle = "",
-        escGetStatus = nil,
 
         connected = false,
         armed = false,
@@ -266,9 +389,18 @@ local function refreshZoneSmall(wgt)
     local _,vh = lcd.sizeText(wgt.throttle, BOLD + MIDSIZE)
     lcd.drawText(rx, cell.y + wgt.zone.h - vh, wgt.throttle, BOLD + RIGHT + MIDSIZE + wgt.text_color)
 
-    if escstatus_text then
-        _,vh = lcd.sizeText(escstatus_text, wgt.escstatus_color)
-        lcd.drawText(cell.x + 6, cell.y + wgt.zone.h - vh - 8, escstatus_text, LEFT + wgt.escstatus_color)
+    local text
+    local color
+    if wgt.scode == PARAM_STATUS_NEED_RESET then
+        text = "RESTART ESC"
+        color = escStatusColors[LEVEL_ERROR] + BLINK
+    else
+        text = escstatus_text
+        color = wgt.escstatus_color
+    end
+    if text then
+        _,vh = lcd.sizeText(text, color)
+        lcd.drawText(cell.x + 6, cell.y + wgt.zone.h - vh - 8, text, LEFT + color)
     end
 end
 
@@ -306,22 +438,24 @@ local function refreshAppMode(wgt, event, touchState)
     y = list_y
     lcd.drawRectangle(cell.x, y, cell.w, cell.h, BLACK, 1)
 
-    y = y + 10
-    for i = 1, math.min(#log, LIST_SIZE) do
-        local ev = logGetEv(events - (i - 1) - (scroll - 1))
-        local evt = getEvTime(wgt, bit32.rshift(ev, 16))
-        local time = string.format("%02d:%02d:%02d.%01d ", evt.hour, evt.min, evt.sec, evt.dsec)
-        lcd.drawText(cell.x + mx, y, time, BLACK)
-        local dx,dy = lcd.sizeText(time, BLACK)
+    if escGetStatus then
+        y = y + 10
+        for i = 1, math.min(#log, LIST_SIZE) do
+            local ev = logGetEv(events - (i - 1) - (scroll - 1))
+            local evt = getEvTime(wgt, bit32.rshift(ev, 16))
+            local time = string.format("%02d:%02d:%02d.%01d ", evt.hour, evt.min, evt.sec, evt.dsec)
+            lcd.drawText(cell.x + mx, y, time, BLACK)
+            local dx,dy = lcd.sizeText(time, BLACK)
 
-        local status = wgt.escGetStatus(bit32.band(ev, 0x00FF), false)
-        local color = escStatusColors[status.level]
-        lcd.drawText(cell.x + mx + dx, y, status.text, bit32.bor(color, BOLD))
-        y = y + dy
-    end
+            local status = escGetStatus(bit32.band(ev, 0x00FF), false)
+            local color = escStatusColors[status.level]
+            lcd.drawText(cell.x + mx + dx, y, status.text, bit32.bor(color, BOLD))
+            y = y + dy
+        end
 
-    if wgt.vslider then
-        wgt.gui.run(event, touchState)
+        if wgt.vslider then
+            wgt.gui.run(event, touchState)
+        end     
     end
 end
 
@@ -337,7 +471,7 @@ local function background(wgt)
         -- configured, try to fetch telemetry value - will be 0 (number) if not connected
         fm = getValue(wgt.options.FlightModeSensor)
         wgt.isDataAvailable = type(fm) == "string"
--- wgt.isDataAvailable = getValue(wgt.options.ThrottleSensor) == 40     -- <<== for testing only
+-- wgt.isDataAvailable = true --getValue(wgt.options.ThrottleSensor) == 40     -- <<== for testing only
 -- fm = "Normal *"
     end
 
@@ -346,7 +480,12 @@ local function background(wgt)
         -- connected
         if not wgt.connected then
             -- reset status / log
-            wgt.escResetStatus()
+            if escResetStatus then
+                escResetStatus()
+            end
+            -- forget ESC
+            escGetStatus = nil
+            escResetStatus = nil
             wgt.connected = true
         end
 
@@ -365,15 +504,34 @@ local function background(wgt)
             wgt.throttle = "Safe"
         end
 
-        -- ESC status (YGE only ATM)
+        -- ESC status
         if wgt.options.EscStatus ~=0 then
-            local scode = getValue(wgt.options.EscStatus)
-            local changed = logPutEv(wgt, scode)
-            local status = wgt.escGetStatus(scode, changed)
-            if status.level >= escstatus_level then
-                escstatus_text = status.text
-                escstatus_level = status.level
-                wgt.escstatus_color = escStatusColors[status.level]
+            wgt.scode = getValue(wgt.options.EscStatus)
+            if bit32.band(wgt.scode, PARAM_OOB_FLAG) == PARAM_OOB_FLAG then
+                if not escGetStatus and wgt.scode ~= PARAM_STATUS_NEED_RESET then
+                    local sig = bit32.band(wgt.scode, PARAM_OOB_MASK)
+                    if sig == YGE_SIG then
+                        escGetStatus = ygeGetStatus
+                        escResetStatus = ygeResetStatus
+                    elseif sig == TRIB_SIG then
+                        escGetStatus = tribGetStatus
+                        escResetStatus = tribResetStatus
+                    elseif sig == PL5_SIG then
+                        escGetStatus = pl5GetStatus
+                        escResetStatus = pl5ResetStatus
+                    elseif sig ~= 0 then
+                        escstatus_text = "Unrecognized ESC"
+                    end
+                    escstatus_level = LEVEL_INFO
+                end
+            elseif escGetStatus then
+                local changed = logPutEv(wgt, wgt.scode)
+                local status = escGetStatus(wgt.scode, changed)
+                if status.level >= escstatus_level then
+                    escstatus_text = status.text
+                    escstatus_level = status.level
+                    wgt.escstatus_color = escStatusColors[status.level]
+                end
             end
         end
 
