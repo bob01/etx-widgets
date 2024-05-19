@@ -20,7 +20,7 @@
 -- Designed for 1/8 cell
 -- Author: Rob Gayle (bob00@rogers.com)
 -- Date: 2024
--- ver: 0.6.2
+-- ver: 0.6.4
 
 local app_name = "eThrottle"
 
@@ -30,8 +30,8 @@ local _options = {
     { "ThrottleSensor"    , SOURCE, 0 },
     { "FlightModeSensor"  , SOURCE, 0 },
     { "EscStatus"         , SOURCE, 0 },
+    { "Color"             , COLOR, BLACK },
     { "Status"            , BOOL, 1 },
-    { "Voice"             , BOOL, 1 },
 }
 
 local LEVEL_TRACE       = 0
@@ -299,6 +299,8 @@ local function update(wgt, options)
 
     wgt.fmode = ""
     wgt.throttle = ""
+
+    escStatusColors[LEVEL_INFO] = wgt.options.Color
 end
 
 local function create(zone, options)
@@ -539,7 +541,7 @@ local function background(wgt)
         wgt.fmode = fm
 
         -- announce if armed state changed
-        if wgt.armed ~= armed and wgt.options.Voice == 1 then
+        if wgt.armed ~= armed then
             if armed then
                 playAudio("armed")
             else
@@ -568,7 +570,7 @@ local function refresh(wgt, event, touchState)
     background(wgt)
 
     if wgt.isDataAvailable then
-        wgt.text_color = BLACK
+        wgt.text_color = wgt.options.Color
     else
         wgt.text_color = COLOR_THEME_DISABLED
         if escstatus_level == LEVEL_INFO then
