@@ -508,40 +508,6 @@ local function getPercentColor(wgt)
     end
 end
 
--- color for cell
--- This function returns green at gvalue, red at rvalue and graduate in between
-local function getRangeColor(value, green_value, red_value)
-    local range = math.abs(green_value - red_value)
-    if range == 0 then
-        return lcd.RGB(0, 0xdf, 0)
-    end
-    if value == nil then
-        return lcd.RGB(0, 0xdf, 0)
-    end
-
-    if green_value > red_value then
-        if value > green_value then
-            return lcd.RGB(0, 0xdf, 0)
-        end
-        if value < red_value then
-            return lcd.RGB(0xdf, 0, 0)
-        end
-        g = math.floor(0xdf * (value - red_value) / range)
-        r = 0xdf - g
-        return lcd.RGB(r, g, 0)
-    else
-        if value > green_value then
-            return lcd.RGB(0, 0xdf, 0)
-        end
-        if value < red_value then
-            return lcd.RGB(0xdf, 0, 0)
-        end
-        r = math.floor(0xdf * (value - green_value) / range)
-        g = 0xdf - r
-        return lcd.RGB(r, g, 0)
-    end
-end
-
 local function drawBattery(wgt, myBatt)
     -- fill batt
     local fill_color = getPercentColor(wgt)
@@ -552,17 +518,6 @@ local function drawBattery(wgt, myBatt)
 
     -- draw battery segments
     lcd.drawRectangle(wgt.zone.x + myBatt.x, wgt.zone.y + myBatt.y + myBatt.cath_h, myBatt.w, myBatt.h - myBatt.cath_h, wgt.cell_color, 2)
-    -- for i = 1, myBatt.h - myBatt.cath_h - myBatt.segments_h, myBatt.segments_h do
-    --    lcd.drawRectangle(wgt.zone.x + myBatt.x, wgt.zone.y + myBatt.y + myBatt.cath_h + i, myBatt.w, myBatt.segments_h, wgt.cell_color, 1)
-    -- end
-
-    -- draw plus terminal
-    --local tw = 4
-    --local th = 4
-    --lcd.drawFilledRectangle(wgt.zone.x + myBatt.x + myBatt.w / 2 - myBatt.cath_w / 2 + tw / 2, wgt.zone.y + myBatt.y, myBatt.cath_w - tw, myBatt.cath_h, WHITE)
-    --lcd.drawFilledRectangle(wgt.zone.x + myBatt.x + myBatt.w / 2 - myBatt.cath_w / 2, wgt.zone.y + myBatt.y + th, myBatt.cath_w, myBatt.cath_h - th, WHITE)
-    --lcd.drawText(wgt.zone.x + myBatt.x + 20, wgt.zone.y + myBatt.y + 5, string.format("%2.0f%%", wgt.vPercent), LEFT + MIDSIZE + wgt.text_color)
-    --lcd.drawText(wgt.zone.x + myBatt.x + 20, wgt.zone.y + myBatt.y + 5, string.format("%2.1fV", wgt.mainValue), LEFT + MIDSIZE + wgt.text_color)
 end
 
 --- Zone size: 70x39 top bar
@@ -592,33 +547,25 @@ local function refreshZoneSmall(wgt)
     -- draw battery
     lcd.drawRectangle(myBatt.x, myBatt.y, myBatt.w + 1, myBatt.h, wgt.text_color, 2)
 
-    -- lcd.drawText(myBatt.x, myBatt.y, myBatt.w, myBatt.h, , )
-
     -- write text
-    if wgt.useSensorP then
-        -- power bar
-        local volts
-        if wgt.cell_detected then
-            -- cell count available
-            volts = string.format("%.1f v / %.2f v (%.0fs)", wgt.vTotalLive, wgt.vCellLive, wgt.cellCount);
-        else
-            -- cell count not available
-            volts = string.format("%.1f v / %.2f v (?s)", wgt.vTotalLive, wgt.vCellLive);
-        end
-        lcd.drawText(myBatt.x + 8, myBatt.y + 4, volts, BOLD + LEFT  + wgt.text_color + wgt.no_telem_blink + wgt.low_batt_blink)
-
-        if wgt.useSensorM then
-            local mah = string.format("%.0f mah", wgt.vMah)
-            lcd.drawText(myBatt.x + 8, myBatt.y + myBatt.h / 2, mah, BOLD + LEFT  + wgt.text_color + wgt.no_telem_blink)
-        end
-
-        local percent = string.format("%.0f%%", wgt.vPercent)
-        lcd.drawText(myBatt.x + myBatt.w - 4, myBatt.y + myBatt.h / 2, percent, BOLD + VCENTER + RIGHT + MIDSIZE + wgt.text_color + wgt.no_telem_blink + wgt.low_batt_blink)
+    -- power bar
+    local volts
+    if wgt.cell_detected then
+        -- cell count available
+        volts = string.format("%.1f v / %.2f v (%.0fs)", wgt.vTotalLive, wgt.vCellLive, wgt.cellCount);
     else
-        -- standard
-        local topLine = string.format(" %2.2f V     %2.0f %%", wgt.mainValue, wgt.vPercent)
-        lcd.drawText(myBatt.x + 15, myBatt.y + 1, topLine, MIDSIZE + wgt.text_color + wgt.no_telem_blink)
+        -- cell count not available
+        volts = string.format("%.1f v / %.2f v (?s)", wgt.vTotalLive, wgt.vCellLive);
     end
+    lcd.drawText(myBatt.x + 8, myBatt.y + 4, volts, BOLD + LEFT  + wgt.text_color + wgt.no_telem_blink + wgt.low_batt_blink)
+
+    if wgt.useSensorM then
+        local mah = string.format("%.0f mah", wgt.vMah)
+        lcd.drawText(myBatt.x + 8, myBatt.y + myBatt.h / 2, mah, BOLD + LEFT  + wgt.text_color + wgt.no_telem_blink)
+    end
+
+    local percent = string.format("%.0f%%", wgt.vPercent)
+    lcd.drawText(myBatt.x + myBatt.w - 4, myBatt.y + myBatt.h / 2, percent, BOLD + VCENTER + RIGHT + MIDSIZE + wgt.text_color + wgt.no_telem_blink + wgt.low_batt_blink)
 end
 
 --- Zone size: 180x70 1/4th  (with sliders/trim)
@@ -627,18 +574,22 @@ local function refreshZoneMedium(wgt)
     local myBatt = { ["x"] = 0 +  wgt.border_l, ["y"] = 0, ["w"] = 50, ["h"] = wgt.zone.h - wgt.border_b, ["segments_w"] = 15, ["color"] = WHITE, ["cath_w"] = 26, ["cath_h"] = 10, ["segments_h"] = 16 }
 
     -- draw values
-    lcd.drawText(wgt.zone.x + myBatt.w + 10 +  wgt.border_l, wgt.zone.y, string.format("%2.2f V", wgt.mainValue), DBLSIZE + wgt.text_color + wgt.no_telem_blink)
+    lcd.drawText(wgt.zone.x + myBatt.w + 10 +  wgt.border_l, wgt.zone.y, string.format("%.1f V", wgt.vTotalLive), DBLSIZE + wgt.text_color + wgt.no_telem_blink)
     lcd.drawText(wgt.zone.x + myBatt.w + 12 +  wgt.border_l, wgt.zone.y + 30, string.format("%2.0f %%", wgt.vPercent), MIDSIZE + wgt.text_color + wgt.no_telem_blink)
-    lcd.drawText(wgt.zone.x + wgt.zone.w - 5 - wgt.border_r, wgt.zone.y + wgt.zone.h - 55, wgt.options.source_name, RIGHT + SMLSIZE + wgt.text_color + wgt.no_telem_blink)
-    --if wgt.options.Show_Total_Voltage == 0 then
-        lcd.drawText(wgt.zone.x + wgt.zone.w - 5 - wgt.border_r, wgt.zone.y + wgt.zone.h - 35, string.format("%2.2fV %d%s", wgt.secondaryValue, wgt.cellCount, wgt.cell_detected and "S" or "?"), RIGHT + SMLSIZE + wgt.text_color + wgt.no_telem_blink)
-    --else
-        --lcd.drawText(wgt.zone.x, wgt.zone.y + 40, string.format("%2.2fV", wgt.mainValue), DBLSIZE + wgt.text_color + wgt.no_telem_blink)
-    --end
-    lcd.drawText(wgt.zone.x + wgt.zone.w - 5 - wgt.border_r, wgt.zone.y + wgt.zone.h - 20, string.format("Min %2.2fV", wgt.vMin), RIGHT + SMLSIZE + wgt.text_color + wgt.no_telem_blink)
+    
+    local volts
+    if wgt.cell_detected then
+        -- cell count available
+        volts = string.format("%.2f v (%.0fs)", wgt.vCellLive, wgt.cellCount);
+    else
+        -- cell count not available
+        volts = string.format("%.2f v (?s)", wgt.vCellLive);
+    end
+    lcd.drawText(wgt.zone.x + wgt.zone.w - 5 - wgt.border_r, wgt.zone.y + wgt.zone.h - 38, volts, RIGHT + wgt.text_color + wgt.no_telem_blink)
 
-    -- more info if 1/4 is high enough (without trim & slider)
-    if wgt.zone.h > 80 then
+    if wgt.useSensorM then
+        local mah = string.format("%.0f mah", wgt.vMah)
+        lcd.drawText(wgt.zone.x + wgt.zone.w - 5 - wgt.border_r, wgt.zone.y + wgt.zone.h - 20, mah, RIGHT + wgt.text_color + wgt.no_telem_blink)
     end
 
     drawBattery(wgt, myBatt)
@@ -648,12 +599,23 @@ end
 local function refreshZoneLarge(wgt)
     local myBatt = { ["x"] = 0, ["y"] = 0, ["w"] = 76, ["h"] = wgt.zone.h, ["segments_h"] = 30, ["color"] = WHITE, ["cath_w"] = 30, ["cath_h"] = 10 }
 
-    lcd.drawText(wgt.zone.x + wgt.zone.w, wgt.zone.y + 10, string.format("%2.2f V", wgt.mainValue), RIGHT + DBLSIZE + wgt.text_color)
-    lcd.drawText(wgt.zone.x + wgt.zone.w, wgt.zone.y + 40, wgt.vPercent .. " %", RIGHT + DBLSIZE + wgt.text_color)
+    lcd.drawText(wgt.zone.x + wgt.zone.w, wgt.zone.y + 10, string.format("%.1f V", wgt.vTotalLive), RIGHT + DBLSIZE + wgt.text_color)
+    lcd.drawText(wgt.zone.x + wgt.zone.w, wgt.zone.y + 40, string.format("%2.0f %%", wgt.vPercent), RIGHT + DBLSIZE + wgt.text_color)
+    
+    local volts
+    if wgt.cell_detected then
+        -- cell count available
+        volts = string.format("%.2f v (%.0fs)", wgt.vCellLive, wgt.cellCount);
+    else
+        -- cell count not available
+        volts = string.format("%.2f v (?s)", wgt.vCellLive);
+    end
+    lcd.drawText(wgt.zone.x + wgt.zone.w, wgt.zone.y + wgt.zone.h - 38, volts, RIGHT + BOLD + wgt.text_color + wgt.no_telem_blink)
 
-    lcd.drawText(wgt.zone.x + wgt.zone.w, wgt.zone.y + wgt.zone.h - 53, wgt.options.source_name, RIGHT + SMLSIZE + wgt.text_color)
-    lcd.drawText(wgt.zone.x + wgt.zone.w, wgt.zone.y + wgt.zone.h - 35, string.format("%2.2fV %d%s", wgt.secondaryValue, wgt.cellCount, wgt.cell_detected and "S" or "?"), RIGHT + SMLSIZE + wgt.text_color)
-    lcd.drawText(wgt.zone.x + wgt.zone.w, wgt.zone.y + wgt.zone.h - 20, string.format("min %2.2fV", wgt.vMin), RIGHT + SMLSIZE + wgt.text_color + wgt.no_telem_blink)
+    if wgt.useSensorM then
+        local mah = string.format("%.0f mah", wgt.vMah)
+        lcd.drawText(wgt.zone.x + wgt.zone.w, wgt.zone.y + wgt.zone.h - 20, mah, RIGHT + BOLD + wgt.text_color + wgt.no_telem_blink)
+    end
 
     drawBattery(wgt, myBatt)
 
@@ -797,9 +759,10 @@ local function refresh(wgt, event, touchState)
         return
     end
 
-    if     wgt.zone.w > 380 and wgt.zone.h > 165 then refreshZoneXLarge(wgt)
-    elseif wgt.zone.w > 180 and wgt.zone.h > 145 then refreshZoneLarge(wgt)
-    elseif wgt.zone.w > 170 and wgt.zone.h >  65 then refreshZoneMedium(wgt)
+    -- if     wgt.zone.w > 380 and wgt.zone.h > 165 then refreshZoneXLarge(wgt)
+    -- else
+    if wgt.zone.w > 180 and wgt.zone.h > 145 then refreshZoneLarge(wgt)
+    elseif wgt.zone.w > 170 and wgt.zone.h >  80 then refreshZoneMedium(wgt)
     elseif wgt.zone.w > 150 and wgt.zone.h >  28 then refreshZoneSmall(wgt)
     elseif wgt.zone.w >  65 and wgt.zone.h >  35 then refreshZoneTiny(wgt)
     end
