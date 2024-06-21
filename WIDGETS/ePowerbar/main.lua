@@ -42,7 +42,7 @@
 -- friendlier UI, new name (vPowerBar), specify cell count option, reserve, haptic critical
 -- Author: Rob Gayle (bob00@rogers.com)
 -- Date: 2024
--- ver: 0.7.3
+-- ver: 0.7.4
 
 local app_name = "ePowerbar"
 
@@ -56,6 +56,8 @@ local cellFull = 4.16
 local CELL_DETECTION_TIME = 10
 local VFLT_SAMPLES_DEFAULT = 150
 local VFLT_INTERVAL_DEFAULT = 10
+
+local GV_CEL = 3
 
 local _options = {
     { "VoltSensor"            , SOURCE, 0 }, -- default to 'A1'
@@ -120,9 +122,16 @@ local function update(wgt, options)
     wgt.low_batt_blink = 0
 
     if wgt.options.Cells == 0 then
-        -- auto cell detection
-        wgt.cellCount = 1
-        wgt.cell_detected = false
+        local gvCel = model.getGlobalVariable(GV_CEL, 0)
+        if gvCel == 0 then
+            -- auto cell detection
+            wgt.cellCount = 1
+            wgt.cell_detected = false
+        else
+            -- use GV cell count
+            wgt.cellCount = gvCel
+            wgt.cell_detected = true
+        end
     else
         -- use cell settings
         wgt.cellCount = wgt.options.Cells
@@ -749,6 +758,16 @@ local function background(wgt)
 
             wgt.battPercentPlayed = battva
             wgt.battNextPlay = getTime() + 500
+        end
+    end
+
+    -- check if GV:4(Cel) cell count changed
+    if wgt.options.Cells == 0 then
+        local gvCel = model.getGlobalVariable(GV_CEL, 0)
+        if gvCel ~= wgt.cellCount then
+            -- use new GV cell count
+            wgt.cellCount = gvCel
+            wgt.cell_detected = (gvCel ~= 0)
         end
     end
 end
