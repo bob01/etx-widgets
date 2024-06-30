@@ -20,7 +20,7 @@
 -- Designed for 1/8 cell
 -- Author: Rob Gayle (bob00@rogers.com)
 -- Date: 2024
--- ver: 0.6.4
+-- ver: 0.6.5
 
 local app_name = "eThrottle"
 
@@ -31,8 +31,10 @@ local _options = {
     { "FlightModeSensor"  , SOURCE, 0 },
     { "EscStatus"         , SOURCE, 0 },
     { "Color"             , COLOR, BLACK },
-    { "Status"            , BOOL, 1 },
 }
+
+local FM_MODE_FM        = 0
+local FM_MODE_GOV       = 1
 
 local LEVEL_TRACE       = 0
 local LEVEL_INFO        = 1
@@ -299,6 +301,7 @@ local function update(wgt, options)
 
     wgt.fmode = ""
     wgt.throttle = ""
+    wgt.fmSensorMode = FM_MODE_FM
 
     escStatusColors[LEVEL_INFO] = wgt.options.Color
 end
@@ -316,6 +319,7 @@ local function create(zone, options)
 
         fmode = "",
         throttle = "",
+        fmSensorMode = FM_MODE_FM,
 
         connected = false,
         armed = false,
@@ -383,9 +387,7 @@ local function refreshZoneSmall(wgt)
     lcd.drawText(cell.x, cell.y, CHAR_TELEMETRY .. "Throttle", LEFT + wgt.text_color)
 
     if wgt.isDataAvailable then
-        if wgt.options.Status == 1 then
-            lcd.drawText(rx, cell.y, wgt.fmode, RIGHT + wgt.text_color)
-        end
+        lcd.drawText(rx, cell.y, wgt.fmode, RIGHT + wgt.text_color)
     end
 
     local _,vh = lcd.sizeText(wgt.throttle, BOLD + MIDSIZE)
@@ -461,6 +463,11 @@ local function refreshAppMode(wgt, event, touchState)
     end
 end
 
+local FM_DISABLED = "DISABLED"
+local FM_GOV_OFF = "OFF"
+local FM_GOV_IDLE = "IDLE"
+local FM_GOV_DISARMED = "DISARMED"
+
 -- This function allow recording of lowest cells when widget is in background
 local function background(wgt)
 
@@ -492,7 +499,22 @@ local function background(wgt)
         end
 
         -- armed?
-        local armed = string.find(fm, "*") ~= nil
+        local armed
+        if wgt.fmSensorMode == FM_MODE_FM then
+            -- assume FM sensor...
+            armed = string.find(fm, "*") ~= nil
+
+            -- ...unless known GOV state seen
+            if fm == FM_GOV_DISARMED or fm == FM_GOV_OFF or fm == FM_GOV_IDLE then
+                wgt.fmSensorMode = FM_MODE_GOV
+            end
+        end
+
+        if wgt.fmSensorMode == FM_MODE_GOV then
+            -- GOV sensor
+            armed = not (fm == FM_DISABLED or fm == FM_GOV_DISARMED);
+        end
+
         if armed then
             -- armed, get ESC throttle if configured
             if wgt.options.ThrottleSensor ~= 0 then
