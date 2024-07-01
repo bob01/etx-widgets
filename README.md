@@ -9,6 +9,9 @@
 These widgets have been designed by R/C Heli pilots for R/C Heli pilots.
 The goal is to present the relevant telemetry expected from modern R/C systems before, during and after flight with on-screen, audio and haptic elements.
 
+### Release notes
+2024.06.30 - eThrottle - GOV status aware of using [crsf_flight_mode_reuse = GOVERNOR] - very useful w/ setting up auto bailout etc.
+
 
 # ePowerbar
 ![image](https://github.com/bob01/etxwidgets/assets/4014433/31942e6a-a4ba-4ae8-943b-a3cb83a7d4ab)
