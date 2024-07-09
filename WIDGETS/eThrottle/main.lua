@@ -20,7 +20,7 @@
 -- Designed for 1/8 cell
 -- Author: Rob Gayle (bob00@rogers.com)
 -- Date: 2024
--- ver: 0.6.5
+-- ver: 0.6.8
 
 local app_name = "eThrottle"
 
@@ -302,6 +302,7 @@ local function update(wgt, options)
     wgt.fmode = ""
     wgt.throttle = ""
     wgt.fmSensorMode = FM_MODE_FM
+    wgt.fmGovLostHs = false
 
     escStatusColors[LEVEL_INFO] = wgt.options.Color
 end
@@ -320,6 +321,7 @@ local function create(zone, options)
         fmode = "",
         throttle = "",
         fmSensorMode = FM_MODE_FM,
+        fmGovLostHs = false,
 
         connected = false,
         armed = false,
@@ -467,6 +469,7 @@ local FM_DISABLED = "DISABLED"
 local FM_GOV_OFF = "OFF"
 local FM_GOV_IDLE = "IDLE"
 local FM_GOV_DISARMED = "DISARMED"
+local FM_GOV_LOSTHS = "LOST-HS"
 
 -- This function allow recording of lowest cells when widget is in background
 local function background(wgt)
@@ -515,6 +518,7 @@ local function background(wgt)
             armed = not (fm == FM_DISABLED or fm == FM_GOV_DISARMED);
         end
 
+        local govLostHs = wgt.fmGovLostHs
         if armed then
             -- armed, get ESC throttle if configured
             if wgt.options.ThrottleSensor ~= 0 then
@@ -523,9 +527,11 @@ local function background(wgt)
             else
                 wgt.throttle = "--"
             end
+            wgt.fmGovLostHs = (fm == FM_GOV_LOSTHS)
         else
             -- not armed
             wgt.throttle = "Safe"
+            wgt.fmGovLostHs = false
         end
 
         -- ESC status
@@ -570,6 +576,13 @@ local function background(wgt)
                 playAudio("disarm")
             end
             wgt.armed = armed
+        end
+
+        -- announce if bailout failed
+        if wgt.fmGovLostHs and wgt.fmGovLostHs ~= govLostHs then
+            playAudio("auto")
+            playAudio("bad")
+            playHaptic(100, 0)
         end
     else
         -- not connected
