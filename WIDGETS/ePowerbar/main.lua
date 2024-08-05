@@ -42,7 +42,7 @@
 -- friendlier UI, new name (vPowerBar), specify cell count option, reserve, haptic critical
 -- Author: Rob Gayle (bob00@rogers.com)
 -- Date: 2024
--- ver: 0.7.4
+-- ver: 0.7.5
 
 local app_name = "ePowerbar"
 
@@ -699,11 +699,17 @@ local function background(wgt)
             wgt.battPercentPlayed = battva
         end
 
+        local critical = wgt.vReserve == 0 and battCritical or 0
+
+        -- silence routine bat% reports if not using sensorP
+        if not wgt.useSensorP and battva > critical + battLowMargin then
+            wgt.battPercentPlayed = battva
+        end
+
         -- time to report?
         if (wgt.battPercentPlayed ~= battva or battva <= 0) and getTime() > wgt.battNextPlay then
 
             -- urgent?
-            local critical = wgt.vReserve == 0 and battCritical or 0
             if battva > critical + battLowMargin then
                 playAudio("battry")
             elseif battva > critical then
@@ -726,7 +732,7 @@ local function background(wgt)
     -- check if GV:4(Cel) cell count changed
     if wgt.options.Cells == 0 then
         local gvCel = model.getGlobalVariable(GV_CEL, 0)
-        if gvCel ~= wgt.cellCount then
+        if gvCel ~= 0 and gvCel ~= wgt.cellCount then
             -- use new GV cell count
             wgt.cellCount = gvCel
             wgt.cell_detected = (gvCel ~= 0)
