@@ -5,7 +5,6 @@ G.appName = app_name
 
 local BEAT_INTERVAL     = 200               -- 10ms ticks
 
-G.beatLast = 0
 G.beatNext = 0
 G.beatId = 0
 
@@ -35,16 +34,10 @@ function G.isTelemetryActive()
     if G.beatNext < now then
         G.beatNext = now + BEAT_INTERVAL
 
-        local beat = getValue(G.beatId)
-        G.telemetryActive = beat ~= G.beatLast
-        G.beatLast = beat
+        G.telemetryActive = getValue(G.beatId) ~= 0
     end
 
     return G.telemetryActive
-end
-
-function G.getLastBeat()
-    return G.beatLast
 end
 
 return init() and G or nil
