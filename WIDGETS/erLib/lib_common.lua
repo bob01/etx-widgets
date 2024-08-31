@@ -1,7 +1,7 @@
 local app_name = ...
 
 local G = {}
-G.appName = app_name
+G.app_name = app_name
 
 local BEAT_INTERVAL     = 200               -- 10ms ticks
 
@@ -15,7 +15,7 @@ local function init()
     -- get BEAT sensor, bail if not found
     local fi = getFieldInfo("BEAT")
     if fi == nil then
-        log("no telemetry sensor found")
+        G.log("no telemetry sensor found")
         return false
     end
     G.beatId = fi.id
