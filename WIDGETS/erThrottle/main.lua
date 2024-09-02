@@ -38,10 +38,6 @@ local LEVEL_INFO        = 1
 local LEVEL_WARN        = 2
 local LEVEL_ERROR       = 3
 
-local PARAM_STATUS_NEED_RESET       = 0x0FFF
-local PARAM_OOB_FLAG                = 0x0F00
-local PARAM_OOB_MASK                = 0x00FF
-
 local escStatusColors = {
     [LEVEL_TRACE] = GREY,
     [LEVEL_INFO]  = BLACK,
@@ -73,9 +69,22 @@ local bootEpoch = getDateTime()
 local bootTime = getTime()
 
 --------------------------------------------------------------
--- YGE status
+-- ESC signatures
 
-local YGE_SIG                   = 0xA5      -- ESC signature
+local ESC_SIG_NONE              = 0x00
+local ESC_SIG_BLHELI32          = 0xC8
+local ESC_SIG_HW4               = 0x9B
+local ESC_SIG_KON               = 0x4B
+local ESC_SIG_OMP               = 0xD0
+local ESC_SIG_ZTW               = 0xDD
+local ESC_SIG_APD               = 0xA0
+local ESC_SIG_PL5               = 0xFD
+local ESC_SIG_TRIB              = 0x53
+local ESC_SIG_OPENYGE           = 0xA5
+local ESC_SIG_RESTART           = 0xFF
+
+--------------------------------------------------------------
+-- YGE status
 
 local STATE_MASK                = 0x0F      -- status bit mask
 local STATE_DISARMED            = 0x00      -- Motor stopped
@@ -191,8 +200,6 @@ end
 -- *         6:  N/A
 -- *         7:  Throttle error
 
-local TRIB_SIG                  = 0x53      -- ESC signature
-
  local function tribGetStatus(code, changed)
     local text = "Scorpion ESC OK"
     local level = LEVEL_INFO
@@ -242,8 +249,6 @@ end
 -- *         5:  Low-voltage error
 -- *         6:  Input-voltage error
 -- *         7:  Motor connection error
-
-local PL5_SIG                   = 0xFD      -- ESC signature
 
 local function pl5GetStatus(code, changed)
    local text = "HobbyWing ESC OK"
@@ -311,16 +316,12 @@ local function update(wgt, options)
     -- reload common libraries
     local commonClass = loadScript("/WIDGETS/erLib/lib_common.lua", "tcd")
     wgt.common = commonClass(app_name)
-    -- fail early
-    wgt.common.isTelemetryActive()
 
     -- get sensors
-    -- { "ThrottleSensor"    , SOURCE, 0 },
-    -- { "EscStatus"         , SOURCE, 0 },
     local fi = getSensorFieldInfo(wgt, "ARM")
     wgt.sensorArmId = fi and fi.id or 0
 
-    local fi = getSensorFieldInfo(wgt, "ARMD")
+    fi = getSensorFieldInfo(wgt, "ARMD")
     wgt.sensorArmDisabledId = fi and fi.id or 0
 
     fi = getSensorFieldInfo(wgt, "Thr")
@@ -328,8 +329,14 @@ local function update(wgt, options)
 
     fi = getSensorFieldInfo(wgt, "Gov")
     wgt.sensorGovId = fi and fi.id or 0
-    -- TODO
 
+    fi = getSensorFieldInfo(wgt, "Esc#")
+    wgt.sensorEscSigId = fi and fi.id or 0
+
+    fi = getSensorFieldInfo(wgt, "EscF")
+    wgt.sensorEscFlagsId = fi and fi.id or 0
+    
+    wgt.sig = ESC_SIG_NONE
 end
 
 local function create(zone, options)
@@ -424,7 +431,7 @@ local function refreshZoneSmall(wgt)
 
     local text
     local color
-    if wgt.scode == PARAM_STATUS_NEED_RESET then
+    if wgt.sig == ESC_SIG_RESTART then
         text = "RESTART ESC"
         color = escStatusColors[LEVEL_ERROR] + BLINK
     else
@@ -597,7 +604,7 @@ local function background(wgt)
                             govStatus = govStatus..(len > 0 and " " or "")..desc
                         end
                     end
-                    govStatus = "# "..govStatus
+                    govStatus = "* "..govStatus
                 else
                     govStatus = "DISARMED";
                 end
@@ -613,36 +620,37 @@ local function background(wgt)
         end
         wgt.fmode = govStatus
 
-        -- ESC status
-        -- if wgt.options.EscStatus ~=0 then
-        --     wgt.scode = getValue(wgt.options.EscStatus)
-        --     if bit32.band(wgt.scode, PARAM_OOB_FLAG) == PARAM_OOB_FLAG then
-        --         if not escGetStatus and wgt.scode ~= PARAM_STATUS_NEED_RESET then
-        --             local sig = bit32.band(wgt.scode, PARAM_OOB_MASK)
-        --             if sig == YGE_SIG then
-        --                 escGetStatus = ygeGetStatus
-        --                 escResetStatus = ygeResetStatus
-        --             elseif sig == TRIB_SIG then
-        --                 escGetStatus = tribGetStatus
-        --                 escResetStatus = tribResetStatus
-        --             elseif sig == PL5_SIG then
-        --                 escGetStatus = pl5GetStatus
-        --                 escResetStatus = pl5ResetStatus
-        --             elseif sig ~= 0 then
-        --                 escstatus_text = "Unrecognized ESC"
-        --             end
-        --             escstatus_level = LEVEL_INFO
-        --         end
-        --     elseif escGetStatus then
-        --         local changed = logPutEv(wgt, wgt.scode)
-        --         local status = escGetStatus(wgt.scode, changed)
-        --         if status.level >= escstatus_level then
-        --             escstatus_text = status.text
-        --             escstatus_level = status.level
-        --             wgt.escstatus_color = escStatusColors[status.level]
-        --         end
-        --     end
-        -- end
+        -- ESC sig
+        if wgt.sensorEscSigId ~= 0 and wgt.sensorEscFlagsId ~= 0 then
+            wgt.sig = getValue(wgt.sensorEscSigId)
+            if not escGetStatus then
+                if wgt.sig == ESC_SIG_OPENYGE then
+                    escGetStatus = ygeGetStatus
+                    escResetStatus = ygeResetStatus
+                elseif wgt.sig == ESC_SIG_TRIB then
+                    escGetStatus = tribGetStatus
+                    escResetStatus = tribResetStatus
+                elseif wgt.sig == ESC_SIG_PL5 then
+                    escGetStatus = pl5GetStatus
+                    escResetStatus = pl5ResetStatus
+                elseif wgt.sig ~= ESC_SIG_NONE then
+                    escstatus_text = "Unrecognized ESC"
+                end
+                escstatus_level = LEVEL_INFO
+            end
+        end
+
+        -- ESC flags
+        if escGetStatus then
+            local flags = getValue(wgt.sensorEscFlagsId)
+            local changed = logPutEv(wgt, flags)
+            local status = escGetStatus(flags, changed)
+            if status.level >= escstatus_level then
+                escstatus_text = status.text
+                escstatus_level = status.level
+                wgt.escstatus_color = escStatusColors[status.level]
+            end
+        end
 
         -- announce if armed state changed
         if wgt.armed ~= armed then

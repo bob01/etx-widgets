@@ -14,14 +14,9 @@ G.telemetryActive = false
 local function init()
     -- get BEAT sensor, bail if not found
     local fi = getFieldInfo("BEAT")
-    if fi == nil then
-        G.log("no telemetry sensor found")
-        return false
-    end
-    G.beatId = fi.id
+    G.beatId = fi ~= nil and fi.id or 0
     
-    -- init good
-    return true
+    return G, G.beatId ~= 0
 end
 
 function G.log(s)
@@ -29,15 +24,16 @@ function G.log(s)
 end
 
 function G.isTelemetryActive()
-    -- time to recalc?
-    local now = getTime()
-    if G.beatNext < now then
-        G.beatNext = now + BEAT_INTERVAL
+    if G.beatId ~= 0 then
+        local now = getTime()
+        if G.beatNext < now then
+            G.beatNext = now + BEAT_INTERVAL
 
-        G.telemetryActive = getValue(G.beatId) ~= 0
+            G.telemetryActive = getValue(G.beatId) ~= 0
+        end
     end
 
     return G.telemetryActive
 end
 
-return init() and G or nil
+return init()
