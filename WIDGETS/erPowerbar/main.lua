@@ -54,6 +54,7 @@ local battLowMargin = 10
 local cellFull = 4.16
 
 local CELL_DETECTION_TIME = 1000
+local VOLTTIMER_DISABLED = -1
 
 local GV_CEL = 3
 
@@ -120,7 +121,7 @@ local function update(wgt, options)
         wgt.cell_detected = true
     end
     wgt.low_batt_blink = BLINK
-    wgt.voltTimer = -1
+    wgt.voltTimer = VOLTTIMER_DISABLED
 end
 
 local function create(zone, options)
@@ -143,6 +144,7 @@ local function create(zone, options)
         cellCount = 1,
         cell_detected = false,
         low_batt_blink = 0,
+        voltTimer = VOLTTIMER_DISABLED,
         mainValue = 0,
         secondaryValue = 0,
 
@@ -195,8 +197,8 @@ local function calculateBatteryData(wgt)
     end
 
     -- check for initial voltage check
-    if wgt.voltTimer ~= -1 and wgt.voltTimer < getTime() then
-        wgt.voltTimer = -1
+    if wgt.voltTimer ~= VOLTTIMER_DISABLED and wgt.voltTimer < getTime() then
+        wgt.voltTimer = VOLTTIMER_DISABLED
 
         -- finalize cell count
         wgt.cellCount = wgt.cellCount ~= 0 and wgt.cellCount or calcCellCount(v)
@@ -271,6 +273,8 @@ local function refreshZoneSmall(wgt)
     lcd.drawRectangle(myBatt.x, myBatt.y, myBatt.w + 1, myBatt.h, wgt.text_color, 2)
 
     -- write text
+    local low_batt_blink = wgt.isTelemetryActive and wgt.low_batt_blink or 0
+
     -- power bar
     local volts
     if wgt.cell_detected then
@@ -280,7 +284,7 @@ local function refreshZoneSmall(wgt)
         -- cell count not available
         volts = string.format("%.1f v / %.2f v (?s)", wgt.secondaryValue, wgt.mainValue);
     end
-    lcd.drawText(myBatt.x + 8, myBatt.y + 4, volts, BOLD + LEFT  + wgt.text_color + wgt.low_batt_blink)
+    lcd.drawText(myBatt.x + 8, myBatt.y + 4, volts, BOLD + LEFT  + wgt.text_color + low_batt_blink)
 
     if wgt.sensorMahId ~= 0 then
         local mah = string.format("%.0f mah", wgt.vMah)
@@ -288,7 +292,7 @@ local function refreshZoneSmall(wgt)
     end
 
     local percent = string.format("%.0f%%", wgt.vPercent)
-    lcd.drawText(myBatt.x + myBatt.w - 4, myBatt.y + myBatt.h / 2, percent, BOLD + VCENTER + RIGHT + MIDSIZE + wgt.text_color + wgt.low_batt_blink)
+    lcd.drawText(myBatt.x + myBatt.w - 4, myBatt.y + myBatt.h / 2, percent, BOLD + VCENTER + RIGHT + MIDSIZE + wgt.text_color + low_batt_blink)
 end
 
 -- This function allow recording of lowest cells when widget is in background
