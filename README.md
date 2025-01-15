@@ -22,7 +22,7 @@ The goal is to present the relevant telemetry expected from modern R/C systems b
 ![image](https://github.com/bob01/etxwidgets/assets/4014433/31942e6a-a4ba-4ae8-943b-a3cb83a7d4ab)
 ![image](https://github.com/bob01/etxwidgets/assets/4014433/aed6ee88-e325-405c-bf60-df8a25913d84)
 ![image](https://github.com/bob01/etxwidgets/assets/4014433/085ecfe2-60d3-499f-bcd6-84455cb73eca)
-![image](https://github.com/user-attachments/assets/1aba530f-2924-494e-8a51-539f5091c89d)
+![image](https://github.com/user-attachments/assets/5e87d859-c6d5-429d-abb4-3e0feb12caff)
 
 
 ### Features
