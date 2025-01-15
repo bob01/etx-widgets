@@ -42,7 +42,7 @@
 -- friendlier UI, new name (vPowerBar), specify cell count option, reserve, haptic critical
 -- Author: Rob Gayle (bob00@rogers.com)
 -- Date: 2024
--- ver: 0.8.0
+-- ver: 0.8.2
 
 local app_name = "erPowerbar"
 
@@ -58,7 +58,14 @@ local VOLTTIMER_DISABLED = -1
 
 local GV_CEL = 3
 
+local defaultVoltSensor = "Vbat"
+local defaultPcntSensor = "Bat%"
+local defaultMahSensor = "Capa"
+
 local _options = {
+    { "VoltSensor"            , SOURCE, 0 },
+    { "PcntSensor"            , SOURCE, 0 },
+    { "MahSensor"             , SOURCE, 0 },
     { "Reserve"               , VALUE, 20, 0, 1000 },   -- reserve (or filter samples if calc percentage)
     { "Cells"                 , VALUE, 0, 0, 14 },      -- cell detection time (or interval if calc perceentage)
 }
@@ -91,13 +98,25 @@ local function update(wgt, options)
     local commonClass = loadScript("/WIDGETS/erLib/lib_common.lua", "tcd")
     wgt.common = commonClass(app_name)
 
-    local fi = getSensorFieldInfo(wgt, "Vbat")
+    if wgt.options.VoltSensor == 0 then
+        wgt.options.VoltSensor = defaultVoltSensor
+    end
+
+    if wgt.options.PcntSensor == 0 then
+        wgt.options.PcntSensor = defaultPcntSensor
+    end
+
+    if wgt.options.MahSensor == 0 then
+        wgt.options.MahSensor = defaultMahSensor
+    end
+
+    local fi = getSensorFieldInfo(wgt, wgt.options.VoltSensor)
     wgt.sensorVoltId = fi and fi.id or 0
 
-    fi = getSensorFieldInfo(wgt, "Capa")
+    fi = getSensorFieldInfo(wgt, wgt.options.MahSensor)
     wgt.sensorMahId = fi and fi.id or 0
 
-    fi = getSensorFieldInfo(wgt, "Bat%")
+    fi = getSensorFieldInfo(wgt, wgt.options.PcntSensor)
     wgt.sensorPcntId = fi and fi.id or 0
 
     fi = getSensorFieldInfo(wgt, "Cel#")
