@@ -13,7 +13,7 @@ The goal is to present the relevant telemetry expected from modern R/C systems b
 - 2024.08.31 - revised for RotorFlight v2.1 (4.4.0)
   - Introduced simplified erPowerbar (replaces ePowerbar), replaces ePowerbar and...
   - simplified erPowerbar (replaces ePowerbar), replaces ePowerbar
-  - both depend on new custom ELRS telemetry feature in RF 2.1 which now has standard names for telemetry sensors, no need to set them - just make sure that required sensors have been selected
+  - both aware of the new custom ELRS telemetry feature in RF 2.1 which has standard names for telemetry sensors. Required sensors will default to these standard names
 - 2024.07.09 - eThrottle - Report "Bad Auto" + haptic if GOV reports LOST-HS ie bailout will not be available
 - 2024.06.30 - eThrottle - GOV status aware of using [crsf_flight_mode_reuse = GOVERNOR] - very useful w/ setting up auto bailout etc.
 
@@ -40,11 +40,13 @@ Flashing will continue to indicate that flight started with a partially charged 
 
 ### Required sensors
 The new RotorFlight v2.1 custom ELRS telemetry feature allows user selection of values to be included in the telemetry stream.<br>
-The following are required and may not be provided by default - please confirm your setup and add as necessary.<br>
-The widget is now hard coded to expect them, no need to set them in "Widget settings" anymore
-- VoltSensor:    battery voltage telemetry sensor, "Vbat"
-- PcntSensor:    battery % consumpumed telemetry sensor, "Bat%"
-- MahSensor:     battery current consumed (mah) telemetry sensor, "Capa"
+![image](https://github.com/user-attachments/assets/46955a2a-60af-4086-a14b-f18d857b01fa)<br>
+The following are required and may not be provided by default - please confirm your setup and add any missing required sensors as needed.<br>
+The widget will default to known sensor names but can be changed if using non-standard names
+- VoltSensor:    battery voltage telemetry sensor, "Vbat: Battery Voltage"
+- PcntSensor:    battery % consumpumed telemetry sensor, "Bat%: Battery Charge Level"
+- MahSensor:     battery current consumed (mah) telemetry sensor, "Capa: Battery Consumption"
+- Cells:         if set to "0" will use the "Cel#: Battery Cell Count" sensor value (optional)
 
 erPowerbar was based on the the excellent 'BattAnalog' widget by Offer Shmuely
 
