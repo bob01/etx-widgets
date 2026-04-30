@@ -10,6 +10,13 @@ These widgets have been designed by R/C Heli pilots for R/C Heli pilots.
 The goal is to present the relevant telemetry expected from modern R/C systems before, during and after flight with on-screen, audio and haptic elements.
 
 ### Release notes
+- 2026.04.29 - 2026 revisions for RF-2.3.x, EdgeTx 2.12.x, Tx16s MK3
+  - many updates to support building single tx model screens for RotorFlight 2.3x+ and OMP OFS3 including...
+  - ePowerbar - enchanements ported from ETHOS version
+  - eBitmap - dynamic image selection based on RotorFlight craft name or cell count (1 - 4, 6)
+  - eThrottle - renamed eStatus
+  - eValue - new: same as stock Value widget + optional min / max fields
+  - docs are out of date but will catch up ... at some point
 - 2024.08.31 - revised for RotorFlight v2.1 (4.4.0)
   - Introduced simplified erPowerbar (replaces ePowerbar), replaces ePowerbar and...
   - simplified erPowerbar (replaces ePowerbar), replaces ePowerbar
