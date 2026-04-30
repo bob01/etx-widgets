@@ -2,6 +2,7 @@
 #########################################################################
 #                                                                       #
 # License GPLv2: http://www.gnu.org/licenses/gpl-2.0.html               #
+# Copyright "Rob 'bob00' Gayle"                                         #
 #                                                                       #
 # This program is free software; you can redistribute it and/or modify  #
 # it under the terms of the GNU General Public License version 2 as     #
@@ -13,22 +14,43 @@
 # GNU General Public License for more details.                          #
 #                                                                       #
 #########################################################################
-
 ]]
 
 -- Throttle and arm state display for RotorFlight
 -- Designed for 1/8 cell
 -- Author: Rob Gayle (bob00@rogers.com)
--- Date: 2024
--- ver: 0.8.0
+-- Date: 2026
+-- ver: 0.9.0.03250
 
-local app_name = "erThrottle"
+local app_name = "eStatus"
 
 local AUDIO_PATH = "/SOUNDS/en/"
 
 local _options = {
-    { "Color"             , COLOR, BLACK },
+    { "ArmFlags"              , SOURCE, getSourceIndex(CHAR_TELEMETRY.."ARM") },
+    { "ArmDisable"            , SOURCE, getSourceIndex(CHAR_TELEMETRY.."ARMD") },
+    { "GovFlags"              , SOURCE, getSourceIndex(CHAR_TELEMETRY.."Gov") },
+    { "Throttle"              , SOURCE, getSourceIndex(CHAR_TELEMETRY.."Thr") },
+    { "EscModel"              , SOURCE, getSourceIndex(CHAR_TELEMETRY.."Esc#") },
+    { "EscStatus"             , SOURCE, getSourceIndex(CHAR_TELEMETRY.."EscF") },
+    { "Mute"                  , BOOL, 0 },
+
+    { "Color"                 , COLOR, COLOR_THEME_PRIMARY1 },
 }
+
+local function translate(text)
+    local translations = {
+        ArmFlags    = "Arming flags",
+        ArmDisable  = "Arming disable flags",
+        GovFlags    = "Governor state",
+        Throttle    = "ESC or GOV throttle",
+        EscModel    = "ESC model ID",
+        EscStatus   = "ESC status",
+        Mute        = "Mute (voice and vibration)",
+        Color       = "Text color",
+    }
+    return translations[text]
+end
 
 local FM_MODE_FM        = 0
 local FM_MODE_GOV       = 1
@@ -298,7 +320,7 @@ local function flyGetStatus(code, changed)
 --         level = LEVEL_WARN
 --    end
    for bit = 0, 7 do
-       if bit32.band(code, bit32.lshift(1, bit)) ~= 0 then
+       if (code & (1 << bit)) ~= 0 then
             if bit == 0 then
                 text = "ESC Over Temp"
                 level = LEVEL_ERROR
@@ -330,6 +352,105 @@ local function flyGetStatus(code, changed)
 end
 
 --------------------------------------------------------------
+-- OMP telemetry
+
+-- * Status Code bits:
+-- *    0:  Short-circuit protection
+-- *    1:  Motor connection error
+-- *    2:  Throttle signal lost
+-- *    3:  Throttle signal >0 on startup error
+-- *    4:  Low voltage protection
+-- *    5:  Temperature protection
+-- *    6:  Startup protection
+-- *    7:  Current protection
+-- *    8:  Throttle signal error
+-- *   12:  Battery voltage error
+
+local function ompGetStatus(code, changed)
+   local text = "OMP ESC OK"
+   local level = LEVEL_INFO
+   -- just report highest order bit (most severe)
+--    if code ~= 0 then
+--         text = string.format("code (%02X)", code)
+--         level = LEVEL_WARN
+--    end
+   for bit = 0, 12 do
+       if (code & (1 << bit)) ~= 0 then
+            if bit == 0 then
+                text = "ESC Short Circuit"
+                level = LEVEL_ERROR
+                break
+            elseif bit == 1 then
+                text = "ESC Motor Connection"
+                level = LEVEL_ERROR
+                break
+            elseif bit == 2 then
+                text = "ESC Throttle Lost"
+                level = LEVEL_WARN
+                break
+            elseif bit == 3 then
+                text = "ESC Throttle Startup"
+                level = LEVEL_ERROR
+                break
+            elseif bit == 4 then
+                text = "ESC Low Voltage"
+                level = LEVEL_ERROR
+                break
+            elseif bit == 5 then
+                text = "ESC Over Temp"
+                level = LEVEL_ERROR
+                break
+            elseif bit == 6 then
+                text = "ESC Startup"
+                level = LEVEL_ERROR
+                break
+            elseif bit == 7 then
+                text = "ESC Overcurrent"
+                level = LEVEL_ERROR
+                break
+            elseif bit == 8 then
+                text = "ESC Throttle Signal"
+                level = LEVEL_WARN
+                break
+            elseif bit == 12 then
+                text = "ESC Battery Voltage"
+                level = LEVEL_ERROR
+                break
+            end
+       end
+   end
+   return { text = text, level = level }
+end
+
+--------------------------------------------------------------
+-- BLHeli_32 telemetry
+
+local function blheli32GetStatus(code, changed)
+   local text = "BLHeli_32 ESC OK"
+   local level = LEVEL_INFO
+
+    if code ~= 0 then
+        text = string.format("ESC status code (%04X)", code)
+    end
+
+   return { text = text, level = level }
+end
+
+--------------------------------------------------------------
+-- unknown ESC
+
+local function unkGetStatus(code, changed)
+    local text = escstatus_text
+    local level = LEVEL_INFO
+
+    if code ~= 0 then
+        text = string.format("ESC status code (%04X)", code)
+    end
+
+    return { text = text, level = level }
+ end
+
+--------------------------------------------------------------
 
 local function resetStatus()
    escstatus_text = nil
@@ -341,54 +462,54 @@ end
 
 --------------------------------------------------------------
 
-local function getSensorFieldInfo(wgt, name)
+local function getSensorFieldInfo(widget, name)
     local fi = getFieldInfo(name)
     if fi == nil then
-        wgt.common.log("Required sensor '"..name.."' missing")
+        widget.common.log("Required sensor '"..name.."' missing")
     end
     return fi
 end
 
-local function update(wgt, options)
-    if (wgt == nil) then
+local function update(widget, options)
+    if (widget == nil) then
         return
     end
 
-    wgt.options = options
+    widget.options = options
 
-    wgt.fmode = ""
-    wgt.throttle = ""
+    widget.fmode = ""
+    widget.throttle = ""
 
-    escStatusColors[LEVEL_INFO] = wgt.options.Color
+    escStatusColors[LEVEL_INFO] = widget.options.Color
 
     -- reload common libraries
-    local commonClass = loadScript("/WIDGETS/erLib/lib_common.lua", "tcd")
-    wgt.common = commonClass(app_name)
+    local commonClass = loadScript("/WIDGETS/eLib/lib_common.lua", "tcd")
+    widget.common = commonClass(app_name)
 
     -- get sensors
-    local fi = getSensorFieldInfo(wgt, "ARM")
-    wgt.sensorArmId = fi and fi.id or 0
+    local fi = getSensorFieldInfo(widget, widget.options.ArmFlags)
+    widget.sensorArmId = fi and fi.id or 0
 
-    fi = getSensorFieldInfo(wgt, "ARMD")
-    wgt.sensorArmDisabledId = fi and fi.id or 0
+    fi = getSensorFieldInfo(widget, widget.options.ArmDisable)
+    widget.sensorArmDisabledId = fi and fi.id or 0
 
-    fi = getSensorFieldInfo(wgt, "Thr")
-    wgt.sensorThrId = fi and fi.id or 0
+    fi = getSensorFieldInfo(widget, widget.options.Throttle)
+    widget.sensorThrId = fi and fi.id or 0
 
-    fi = getSensorFieldInfo(wgt, "Gov")
-    wgt.sensorGovId = fi and fi.id or 0
+    fi = getSensorFieldInfo(widget, widget.options.GovFlags)
+    widget.sensorGovId = fi and fi.id or 0
 
-    fi = getSensorFieldInfo(wgt, "Esc#")
-    wgt.sensorEscSigId = fi and fi.id or 0
+    fi = getSensorFieldInfo(widget, widget.options.EscModel)
+    widget.sensorEscSigId = fi and fi.id or 0
 
-    fi = getSensorFieldInfo(wgt, "EscF")
-    wgt.sensorEscFlagsId = fi and fi.id or 0
+    fi = getSensorFieldInfo(widget, widget.options.EscStatus)
+    widget.sensorEscFlagsId = fi and fi.id or 0
     
-    wgt.sig = ESC_SIG_NONE
+    widget.sig = ESC_SIG_NONE
 end
 
 local function create(zone, options)
-    local wgt = {
+    local widget = {
         zone = zone,
         options = options,
 
@@ -408,12 +529,12 @@ local function create(zone, options)
     }
 
     -- imports
-    wgt.libGUI = loadGUI()
-    wgt.gui = wgt.libGUI.newGUI()
-    wgt.vslider = nil
+    widget.libGUI = loadGUI()
+    widget.gui = widget.libGUI.newGUI()
+    widget.vslider = nil
 
-    update(wgt, options)
-    return wgt
+    update(widget, options)
+    return widget
 end
 
 -- audio support
@@ -430,7 +551,7 @@ local function logGetEv(idx)
 end
 
 -- log status change, return true if new event logged
-local function logPutEv(wgt, scode)
+local function logPutEv(widget, scode)
     if events > 0 and bit32.band(logGetEv(events), 0xFF) == bit32.band(scode, 0xFF) then
         return false
     end
@@ -443,8 +564,8 @@ local function logPutEv(wgt, scode)
 end
 
 -- format log time
-local function getEvTime(wgt, evt)
-    local t = wgt.epoch + evt
+local function getEvTime(widget, evt)
+    local t = widget.epoch + evt
     local dsec = t % 10
     t = math.floor(t / 10)
 
@@ -458,43 +579,43 @@ local function getEvTime(wgt, evt)
 end
 
 --- Zone size: 160x32 1/8th
-local function refreshZoneSmall(wgt)
-    local cell = { ["x"] = 5, ["y"] = 4, ["w"] = wgt.zone.w - 4, ["h"] = wgt.zone.h - 8 }
+local function refreshZoneSmall(widget)
+    local cell = { ["x"] = 5, ["y"] = 4, ["w"] = widget.zone.w - 4, ["h"] = widget.zone.h - 8 }
 
     -- draw
     local rx = cell.x + cell.w - 6
 
-    lcd.drawText(cell.x, cell.y, CHAR_TELEMETRY .. "Throttle", LEFT + wgt.text_color)
+    lcd.drawText(cell.x, cell.y, CHAR_TELEMETRY .. "Throttle", LEFT + widget.text_color)
 
-    if wgt.isDataAvailable then
-        local flags = RIGHT + wgt.text_color
-        if string.len(wgt.fmode) > 14 then
+    if widget.isDataAvailable then
+        local flags = RIGHT + widget.text_color
+        if string.len(widget.fmode) > 14 then
             flags = flags + SMLSIZE
         end
-        lcd.drawText(rx, cell.y, wgt.fmode, flags)
+        lcd.drawText(rx, cell.y, widget.fmode, flags)
     end
 
-    local _,vh = lcd.sizeText(wgt.throttle, BOLD + MIDSIZE)
-    lcd.drawText(rx, cell.y + wgt.zone.h - vh, wgt.throttle, BOLD + RIGHT + MIDSIZE + wgt.text_color)
+    local _,vh = lcd.sizeText(widget.throttle, BOLD + MIDSIZE)
+    lcd.drawText(rx, cell.y + widget.zone.h - vh, widget.throttle, BOLD + RIGHT + MIDSIZE + widget.text_color)
 
     local text
     local color
-    if wgt.sig == ESC_SIG_RESTART then
+    if widget.sig == ESC_SIG_RESTART then
         text = "RESTART ESC"
         color = escStatusColors[LEVEL_ERROR] + BLINK
     else
         text = escstatus_text
-        color = wgt.escstatus_color
+        color = widget.escstatus_color
         color = BLACK
     end
     if text then
         _,vh = lcd.sizeText(text, color)
-        lcd.drawText(cell.x + 6, cell.y + wgt.zone.h - vh - 8, text, LEFT + color)
+        lcd.drawText(cell.x + 6, cell.y + widget.zone.h - vh - 8, text, LEFT + color)
     end
 end
 
 --- Zone size: 460x252 - app mode (full screen)
-local function refreshAppMode(wgt, event, touchState)
+local function refreshAppMode(widget, event, touchState)
     if event and event == EVT_VIRTUAL_EXIT then
         lcd.exitFullScreen()
         return
@@ -506,15 +627,15 @@ local function refreshAppMode(wgt, event, touchState)
     local scroll = 1
     if events > LIST_SIZE then
         local max = #log - LIST_SIZE + 1
-        if not wgt.vslider then
+        if not widget.vslider then
             -- create scrollbar
             local mvy = 20
-            wgt.vslider = wgt.gui.verticalSlider(cell.w - 32, list_y + mvy, cell.h - list_y - 2 * mvy, max, 1, max, 1, nil)
+            widget.vslider = widget.gui.verticalSlider(cell.w - 32, list_y + mvy, cell.h - list_y - 2 * mvy, max, 1, max, 1, nil)
         else
             -- update scrollbar max
-            scroll = wgt.vslider.max -  wgt.vslider.value + 1
-            wgt.vslider.max = max
-            wgt.vslider.value = wgt.vslider.max - scroll + 1
+            scroll = widget.vslider.max -  widget.vslider.value + 1
+            widget.vslider.max = max
+            widget.vslider.value = widget.vslider.max - scroll + 1
         end
     end
 
@@ -531,7 +652,7 @@ local function refreshAppMode(wgt, event, touchState)
         y = y + 10
         for i = 1, math.min(#log, LIST_SIZE) do
             local ev = logGetEv(events - (i - 1) - (scroll - 1))
-            local evt = getEvTime(wgt, bit32.rshift(ev, 16))
+            local evt = getEvTime(widget, bit32.rshift(ev, 16))
             local time = string.format("%02d:%02d:%02d.%01d ", evt.hour, evt.min, evt.sec, evt.dsec)
             lcd.drawText(cell.x + mx, y, time, BLACK)
             local dx,dy = lcd.sizeText(time, BLACK)
@@ -542,14 +663,14 @@ local function refreshAppMode(wgt, event, touchState)
             y = y + dy
         end
 
-        if wgt.vslider then
-            wgt.gui.run(event, touchState)
+        if widget.vslider then
+            widget.gui.run(event, touchState)
         end     
     end
 end
 
 local govStates = {
-    [0] = "OFF",
+    "OFF",
     "IDLE",
     "SPOOLUP",
     "RECOVERY",
@@ -561,7 +682,7 @@ local govStates = {
 }
 
 local armDisabledDescs = {
-    [0] = "NOGYRO",
+    "NOGYRO",
     "FAILSAFE",
     "RXLOSS",
     "BADRX",
@@ -589,16 +710,15 @@ local armDisabledDescs = {
     "ARMSWITCH",
 }
 
--- This function allow recording of lowest cells when widget is in background
-local function background(wgt)
+local function background(widget)
 
     -- assume telemetry not available
-    wgt.isDataAvailable = wgt.common.isTelemetryActive()
+    widget.isDataAvailable = widget.common.isTelemetryActive()
 
     -- connected?
-    if wgt.isDataAvailable then
+    if widget.isDataAvailable then
         -- connected
-        if not wgt.connected then
+        if not widget.connected then
             -- reset status / log
             if escResetStatus then
                 escResetStatus()
@@ -606,35 +726,43 @@ local function background(wgt)
             -- forget ESC
             escGetStatus = nil
             escResetStatus = nil
-            wgt.connected = true
+            widget.connected = true
         end
 
         -- armed?
         local armed
-        if wgt.sensorArmId ~= 0 then
-            armed = (bit32.band(getValue(wgt.sensorArmId), 0x01) == 0x01)
+        local rfArmSensor
+        if widget.sensorArmId ~= 0 then
+            local val = getValue(widget.sensorArmId)
+            rfArmSensor = (bit32.band(val, 0x01) == 0x01)
+            armed = rfArmSensor or val == 1024
         else
             armed = false
+            rfArmSensor = false
         end
 
         if armed then
             -- armed, get ESC throttle if configured
-            if wgt.sensorThrId ~= 0 then
-                local thro = getValue(wgt.sensorThrId)
-                wgt.throttle = string.format("%d%%", thro)
+            if widget.sensorThrId ~= 0 then
+                local thro = getValue(widget.sensorThrId)
+                if not rfArmSensor then
+                    -- convert -1024 / 1024 throttle range to %
+                    thro = (thro + 1024) * 100 / 2048
+                end
+                widget.throttle = string.format("%d%%", thro)
             else
-                wgt.throttle = "--"
+                widget.throttle = "--"
             end
         else
             -- not armed
-            wgt.throttle = "Safe"
+            widget.throttle = "Safe"
         end
 
         -- GOV status
         local govStatus
-        if wgt.sensorGovId ~= 0 and wgt.sensorArmDisabledId ~= 0 then
-            local gs = getValue(wgt.sensorGovId)
-            local adf = getValue(wgt.sensorArmDisabledId)
+        if widget.sensorGovId ~= 0 and widget.sensorArmDisabledId ~= 0 then
+            local gs = getValue(widget.sensorGovId)
+            local adf = getValue(widget.sensorArmDisabledId)
 
             if not armed then
                 if adf ~= 0 then
@@ -643,7 +771,7 @@ local function background(wgt)
                     for i = 1, #armDisabledDescs do
                         local bit = i - 1
                         if bit32.band(adf, bit32.lshift(1, bit)) ~= 0 then
-                            local desc = armDisabledDescs[bit]
+                            local desc = armDisabledDescs[bit + 1]
                             local len = string.len(govStatus)
                             if len + string.len(desc) + 1 > 18 then
                                 govStatus = govStatus.." +"
@@ -657,8 +785,9 @@ local function background(wgt)
                     govStatus = "DISARMED";
                 end
             else
-                if gs < #govStates then
-                    govStatus = govStates[gs]
+                local idx = gs + 1
+                if idx <= #govStates then
+                    govStatus = govStates[idx]
                 else
                     govStatus = "UNKNOWN("..gs..")"
                 end
@@ -666,26 +795,33 @@ local function background(wgt)
         else
             govStatus = "--"
         end
-        wgt.fmode = govStatus
+        widget.fmode = govStatus
 
         -- ESC sig
-        if wgt.sensorEscSigId ~= 0 and wgt.sensorEscFlagsId ~= 0 then
-            wgt.sig = getValue(wgt.sensorEscSigId)
+        if widget.sensorEscSigId ~= 0 and widget.sensorEscFlagsId ~= 0 then
+            widget.sig = getValue(widget.sensorEscSigId)
             if not escGetStatus then
-                if wgt.sig == ESC_SIG_OPENYGE then
+                if widget.sig == ESC_SIG_OPENYGE then
                     escGetStatus = ygeGetStatus
                     escResetStatus = ygeResetStatus
-                elseif wgt.sig == ESC_SIG_TRIB then
+                elseif widget.sig == ESC_SIG_TRIB then
                     escGetStatus = tribGetStatus
                     escResetStatus = resetStatus
-                elseif wgt.sig == ESC_SIG_PL5 then
+                elseif widget.sig == ESC_SIG_PL5 then
                     escGetStatus = pl5GetStatus
                     escResetStatus = resetStatus
-                elseif wgt.sig == ESC_SIG_FLY then
+                elseif widget.sig == ESC_SIG_FLY then
                     escGetStatus = flyGetStatus
                     escResetStatus = resetStatus
-                elseif wgt.sig ~= ESC_SIG_NONE then
-                    escstatus_text = "Unrecognized ESC"..string.format(" (%02X)", wgt.sig)
+                elseif widget.sig == ESC_SIG_OMP then
+                    escGetStatus = ompGetStatus
+                    escResetStatus = resetStatus
+                elseif widget.sig == ESC_SIG_BLHELI32 then
+                    escGetStatus = blheli32GetStatus
+                    escResetStatus = resetStatus
+                elseif widget.sig ~= ESC_SIG_NONE then
+                    escstatus_text = "Unrecognized ESC"..string.format(" (%02X)", widget.sig)
+                    escGetStatus = unkGetStatus
                 end
                 escstatus_level = LEVEL_INFO
             end
@@ -693,60 +829,59 @@ local function background(wgt)
 
         -- ESC flags
         if escGetStatus then
-            local flags = getValue(wgt.sensorEscFlagsId)
-            local changed = logPutEv(wgt, flags)
+            local flags = getValue(widget.sensorEscFlagsId)
+            local changed = logPutEv(widget, flags)
             local status = escGetStatus(flags, changed)
             if status.level >= escstatus_level then
                 escstatus_text = status.text
                 escstatus_level = status.level
-                wgt.escstatus_color = escStatusColors[status.level]
+                widget.escstatus_color = escStatusColors[status.level]
             end
         end
 
         -- announce if armed state changed
-        if wgt.armed ~= armed then
+        if widget.options.Mute == 0 and widget.armed ~= armed then
             if armed then
                 playAudio("armed")
             else
                 playAudio("disarm")
             end
-            wgt.armed = armed
+            widget.armed = armed
         end
     else
         -- not connected
-        wgt.throttle = "**"
-        wgt.fmode = ""
-        wgt.connected = false
+        widget.throttle = "**"
+        widget.fmode = ""
+        widget.connected = false
 
         -- reset last armed
-        wgt.armed = false
+        widget.armed = false
     end
 end
 
-local function refresh(wgt, event, touchState)
+local function refresh(widget, event, touchState)
 
-    if (wgt == nil)         then return end
-    if type(wgt) ~= "table" then return end
-    if (wgt.options == nil) then return end
-    if (wgt.zone == nil)    then return end
+    if (widget == nil)         then return end
+    if type(widget) ~= "table" then return end
+    if (widget.options == nil) then return end
+    if (widget.zone == nil)    then return end
 
-    background(wgt)
+    background(widget)
 
-    if wgt.isDataAvailable then
-        wgt.text_color = wgt.options.Color
+    if widget.isDataAvailable then
+        widget.text_color = widget.options.Color
     else
-        wgt.text_color = COLOR_THEME_DISABLED
+        widget.text_color = COLOR_THEME_DISABLED
         if escstatus_level == LEVEL_INFO then
-            wgt.escstatus_color = COLOR_THEME_DISABLED
+            widget.escstatus_color = COLOR_THEME_DISABLED
         end
     end
 
-
     if (event ~= nil) then
-        refreshAppMode(wgt, event, touchState)
+        refreshAppMode(widget, event, touchState)
     else
-        refreshZoneSmall(wgt)
+        refreshZoneSmall(widget)
     end
 end
 
-return { name = app_name, options = _options, create = create, update = update, background = background, refresh = refresh }
+return { name = app_name, options = _options, create = create, update = update, background = background, refresh = refresh, translate = translate }
