@@ -19,7 +19,7 @@
 -- RotorFlight aware bitmap
 -- Author: Rob Gayle (bob00@rogers.com)
 -- Date: 2026
--- ver: 0.9.0.04070
+-- ver: 0.9.0.04301
 
 local app_name = "eBitmap"
 
@@ -46,6 +46,10 @@ local function translate(text)
     return translations[text]
 end
 
+local function stripGt(str)
+    return string.sub(str, 1, 1) == ">" and string.sub(str, 2) or str
+end
+
 local function loadBitmapFile(name, ext)
     local path = imageDir .. name .. ext
     local bmp = (fstat(path) and Bitmap.open(path)) or nil
@@ -57,6 +61,7 @@ local function loadBitmapFile(name, ext)
 end
 
 local function loadBitmap(name)
+    name = stripGt(name)
     return loadBitmapFile(name, "") or
         loadBitmapFile(name, ".png") or
         loadBitmapFile(name, ".bmp") or
@@ -109,7 +114,7 @@ local function paint(widget)
 
     -- text
     local textShadowed = widget.options.Shadow == 0 and 0 or SHADOWED
-    local text = widget.modelName or "---"
+    local text = stripGt(widget.modelName or "---")
     local textFlags = (widget.options.Size << 8) + textShadowed + widget.text_color
     local text_w, text_h = lcd.sizeText(text, textFlags)
 
